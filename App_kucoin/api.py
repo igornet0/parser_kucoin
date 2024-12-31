@@ -48,7 +48,6 @@ class KuCoinAPI:
 
         try:
             data = self.market.get_kline(f"{symbol}-USDT", time)
-
         except Exception as e:
             self.logger["ERROR"](f"Error get kline {e}")
             return None
@@ -57,7 +56,7 @@ class KuCoinAPI:
 
         df = pd.DataFrame(data, columns=colums).drop("_", axis=1)
         if len(df) == 0:
-            self.logger["ERROR"](f"Error get kline {len(df)=}")
+            self.logger["ERROR"](f"Error get kline {symbol}-USDT - {len(df)=}")
             return None
         
         df = df.drop(df.index[-1])
