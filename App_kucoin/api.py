@@ -73,4 +73,4 @@ class KuCoinAPI:
         return Dataset(df, 
                        save=self.save, 
                        path_save=self.path_save, 
-                       file_name=f"{symbol}_{time}_{datetime.now().strftime('%Y-%m-%d')}.csv").get_dataset()
+                       file_name=f"{symbol}_{time}.csv").get_dataset()
