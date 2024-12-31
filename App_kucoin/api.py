@@ -49,7 +49,7 @@ class KuCoinAPI:
         try:
             data = self.market.get_kline(f"{symbol}-USDT", time)
         except Exception as e:
-            self.logger["ERROR"](f"Error get kline {e}")
+            self.logger["ERROR"](f"Error get kline {symbol}-USDT - {e}")
             return None
 
         colums = ["datetime", "open", "high", "low", "close", "_", "volume"]
