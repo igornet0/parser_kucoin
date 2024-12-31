@@ -29,15 +29,17 @@ def start_parser(coins_list: str, time_parser="5m", pause=60):
 
     count_cpu = mp.cpu_count()
     byffer_process = {}
-    pause_loop = 0
+    pause_time = 0
 
     while True:
 
         if keyboard.is_pressed("q"):
             break
-        elif pause_loop:
+        elif pause_time > 0:
             time.sleep(1)
-            pause_loop -= 1
+            pause_time -= 1
+            loger["INFO"](f"All processes are complete, wait {pause_time} minute", 
+                            reset=True)
             continue
 
         for coin, _ in filter(lambda x: x[1] is None or datetime.now() - x[1] > timedelta(minutes=pause), coins.items()):
@@ -51,9 +53,13 @@ def start_parser(coins_list: str, time_parser="5m", pause=60):
                 coins[coin] = datetime.now()
 
         if len(byffer_process) == 0:
-            loger["INFO"](f"All processes are complete, wait {pause*60} minute")
-            pause_loop = pause*60
+            loger["INFO"](f"All processes are complete, wait {pause*60} minute", 
+                            reset=True)
+            pause_time = pause*60
             continue
+            
+
+            
         
         for process in byffer_process.values():
             process.join()
