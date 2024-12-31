@@ -38,7 +38,7 @@ def start_parser(coins_list: str, time_parser="5m", pause=60):
         elif pause_time > 0:
             time.sleep(1)
             pause_time -= 1
-            loger["INFO"](f"All processes are complete, wait {pause_time} minute", 
+            loger["INFO"](f"All processes are complete, wait {pause_time/60} minute", 
                             reset=True)
             continue
 
