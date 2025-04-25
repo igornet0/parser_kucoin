@@ -1,0 +1,335 @@
+import asyncio
+from datetime import datetime, timedelta
+from typing import List, Any, Callable
+from collections import namedtuple
+import pandas as pd
+import multiprocessing as mp
+from aioconsole import ainput
+from functools import wraps
+import os
+
+from parser_driver import ParserApi, ParserKucoin, KuCoinAPI
+from core.models import Dataset, DatasetTimeseries
+from core.utils import AutoDecorator
+from core.utils import image_to_text
+from core import DataManager
+
+import logging
+
+logger = logging.getLogger("parser_logger.att")
+
+class AttParser:
+
+    def __init__(self, api: ParserApi, pause: int = 60, clear: bool = False) -> None:
+        self.dm = DataManager()
+        self.coin_list: List[str] = self.dm.coin_list[::-1]
+        self.driver_lock = False
+
+        self.pause = pause
+
+        # Autoclear
+        self.flag_clear = clear
+        self.buffer_data = []
+        self.autodecorator = AutoDecorator(self)
+
+        self.flag_save = False
+        self.save_type = "raw"
+
+        self.path_save = None
+
+        self.api = api
+    
+    async def parse(self, count: int = 10, time_parser="5m", 
+                    save: bool = False, save_type: str = "raw",
+                    *input_args) -> dict[str, pd.DataFrame]:
+
+        coins_list = list(map(lambda x: x.strip(), self.coin_list))
+
+        self.path_save = None
+
+        if isinstance(self.api, KuCoinAPI):
+            func_parser = self.api.get_kline
+            check_stop = self._check_stop_parser
+            input_args = ('USDT', time_parser, *input_args)
+
+        elif isinstance(self.api, ParserApi):
+            self.api.set_timetravel(time_parser)
+            func_parser = self.api.start_parser
+            check_stop = self._check_stop
+            input_args = (count, )
+
+            self.driver_lock = True
+
+        func_pars = self.start_parser
+
+        if save:
+            self.flag_save = True
+            self.save_type = save_type
+
+        data: dict[str, Dataset] = await func_pars(func_parser,
+                                                    check_stop,
+                                                coins_list, count, 
+                                                time_parser,
+                                                *input_args)    
+
+        return data
+    
+    def filter_coins(self, data_coin: dict[str, Any], filter_value: Callable[[Any], bool]):
+        for coin, value in data_coin.items():
+            if filter_value(value):
+                yield coin
+
+    @staticmethod
+    def _wrapper(func: Callable, queue: mp.Queue, input_args: tuple, output_args: tuple = None):
+        """Wrapper to get data and put result in queue"""
+        try:
+            output_args = output_args if isinstance(output_args, tuple) else (output_args, )
+            queue.put((*output_args, func(*input_args)))
+        except Exception as e:
+            logger.error(f"Error processing {func.__name__} {e}")
+            queue.put(None)
+
+        return queue
+    
+    @staticmethod
+    async def _async_wrapper(func: Callable, queue: mp.Queue, input_args: tuple, output_args: tuple = None):
+        """Wrapper to get data and put result in queue"""
+        try:
+            output_args = output_args if isinstance(output_args, tuple) else (output_args, )
+            result = await func(*input_args)
+            logger.debug(f"Result {func.__name__} {result}")
+            queue.put((*output_args, result))
+
+        except Exception as e:
+            logger.error(f"Error processing {func.__name__} {e}")
+            queue.put(None)
+
+        return queue
+    
+    def save_data(self, data: dict[str, Dataset] | Dataset, path_type: str = "raw", 
+                  coin: str = "coin", time_parser: str = "5m") -> dict[str, Dataset]:
+        """Save data to file"""
+
+        self.api.set_save_path(self.dm[path_type])
+
+        if self.path_save is None:
+            path_save = self.api.create_launch_dir()
+            self.path_save = path_save
+        else:
+            path_save = self.path_save
+
+        if isinstance(data, DatasetTimeseries):
+            data = {data.timetravel: data}
+        elif isinstance(data, Dataset):
+
+            data = {coin: data}
+            
+        for coin, dataset in data.items():
+
+            if self.flag_clear:
+                dataset = self.clear_dataset(dataset, coin, time_parser)
+
+            path_save_coin = os.path.join(path_save, coin)
+            dataset.set_path_save(path_save_coin)
+            dataset.set_filename("{coin}_{time}.csv".format(coin=coin, time=time_parser))
+            dataset.save_dataset()
+            logger.info("Save data for coin: %s, count: %d", coin, len(dataset))
+
+        return data
+
+    async def start_parser(self, func_parser:Callable, 
+                            check_stop: Callable,
+                           coins_list: List, count: int = -1, 
+                           time_parser: str ="5m", *args) -> List[pd.DataFrame]:
+        
+        coins = {coin: None for coin in coins_list}
+        len_coins = len(coins)
+        all_dataframes = {}
+        result_queue = mp.Queue()
+        count_cpu = mp.cpu_count() if not self.driver_lock else 1
+        buffer_processes = {}
+        # stop_event = asyncio.Event()
+        stop_event = None
+
+        # Запускаем фоновую задачу для проверки ввода
+        # input_task = asyncio.create_task(self._check_stop_input(stop_event))
+
+        logger.info("Start parser - %s, count_cpu: %d", datetime.now(), count_cpu)
+        logger.info(f"Tracking {len_coins} coins")
+
+        try:
+            while check_stop(**{"stop_event": stop_event, 
+                              "count": count, "all_dataframes": all_dataframes, 
+                              "len_coins": len_coins}):
+
+                # Управление процессами
+                await self._manage_processes(
+                    func_parser,
+                    coins, 
+                    buffer_processes,
+                    result_queue,
+                    count_cpu,
+                    *args
+                )
+
+                # Сбор результатов
+                await self._collect_results(result_queue, all_dataframes, buffer_processes, time_parser)
+
+                await asyncio.sleep(0.1)
+
+        # except Exception as e:
+        #     logger.error(f"Parser error - {e}")
+
+        finally:
+            # input_task.cancel()
+            self._cleanup_processes(buffer_processes)
+
+        logger.info("End parser  - %s", datetime.now())
+
+        return all_dataframes
+    
+    def _check_stop_parser(self, stop_event, count, all_dataframes, len_coins):
+        return len(list(filter(lambda list: len(list)==count, all_dataframes.values()))) != len_coins
+    
+    def _check_stop(self, stop_event, count, all_dataframes: dict, len_coins):
+        return not all_dataframes or \
+                len(all_dataframes.keys()) <= len_coins or \
+                not all(map(lambda key: (not all_dataframes[key] is None) and len(all_dataframes[key]) >= count, all_dataframes.keys()))
+
+    # async def _check_stop_input(self, stop_event: asyncio.Event):
+    #     """Асинхронная проверка ввода 'q' для остановки"""
+    #     while True:
+    #         if await ainput("") == 's':
+    #             stop_event.set()
+    #             break
+
+    #         elif await ainput("") == 'p':
+    #             while True:
+    #                 if await ainput("") == 'p':
+    #                     stop_event.set()
+    #                     break
+    #                 await asyncio.sleep(0.1)
+
+    #         await asyncio.sleep(0.1)
+
+    async def _manage_processes(self, func_parser, coins, buffer_processes, 
+                                result_queue, count_cpu, *args):
+        
+        """Управление пулом процессов"""
+        for coin, last_time in coins.items():
+            if len(buffer_processes) >= count_cpu:
+                break
+        
+            if self._should_process_coin(last_time, self.pause):
+                if self.buffer_data:
+                    coins_last = self.buffer_data.pop()
+                    dataset: DatasetTimeseries = coins_last[coin]
+
+                    logger.info("Start coin: %s with data from buffer %s", coin, len(dataset))
+                    
+                    if self.driver_lock:
+                        last_datetime = dataset.get_dataset()["datetime"].min()
+                        args = (*args, last_datetime)
+                else:
+                    logger.info(f"Start new coin: {coin}")
+
+                await self._start_process_for_coin(
+                        func_parser,
+                        coin,
+                        buffer_processes,
+                        result_queue,
+                        *args
+                    )
+                coins[coin] = datetime.now()
+
+    async def _start_process_for_coin(self, func_parser: Callable, coin: str, 
+                                buffer_processes, result_queue, *args):
+        
+        """Запуск процесса для конкретной монеты"""
+        if not self.driver_lock:
+            p = mp.Process(target=self._wrapper, 
+                            args=(func_parser, result_queue, (coin, *args), (coin,)),
+                            daemon=True)
+            
+            logger.debug(f"Start process for coin: {coin}")
+            p.start()
+
+        else:
+            await self._async_wrapper(func_parser, result_queue, (coin, *args), (coin,))
+            p = None
+
+        buffer_processes[coin] = p
+
+    async def _collect_results(self, result_queue, all_dataframes, buffer_processes, time_parser):
+        """Сбор результатов из очереди"""
+        while not result_queue.empty():
+            # coin, *data = result_queue.get()
+            data = result_queue.get()
+
+            if data is None:
+                continue
+
+            coin = data[0]
+            data: Dataset = data[1:]
+
+            if len(data) == 0:
+                continue
+
+            if len(data) == 1:
+                data = data[0]
+
+            all_dataframes.setdefault(coin, None)
+
+            if all_dataframes[coin] is None:
+                data = Dataset(Dataset.concat_dataset(all_dataframes[coin], data))
+            
+            # logger.warning(f"{coin}-{data.get_dataset()}")
+
+            if isinstance(data, Dataset) and self.flag_save:
+                data = self.save_data(data, self.save_type, coin, time_parser)[coin]
+
+            all_dataframes[coin] = data
+
+            logger.info("Get data for coin: %s, count: %d", coin, len(all_dataframes[coin]))
+
+            del buffer_processes[coin]
+
+    def _cleanup_processes(self, processes):
+        """Очистка запущенных процессов"""
+        for p in processes.values():
+            if not p is None and p.is_alive():
+                p.terminate()
+
+            if not p is None:
+                p.join()
+
+    @staticmethod
+    def _should_process_coin(last_time, pause):
+        """Определяет нужно ли обрабатывать монету"""        
+        if last_time is None:
+            return True
+        elif pause <= 0:
+            return False
+        
+        return (datetime.now() - last_time) > timedelta(minutes=pause)
+    
+    async def parser_img(self, count: int = 10, time_parser="5m"):
+        if isinstance(self.api, ParserKucoin):
+            coin = self.coin_list[0]
+            await self.api.init(coin)
+
+            for _ in range(count):
+                img = await self.api.get_element_datetime(get_img=True)
+                name = image_to_text(img)
+                self.dm.save_img(img, time_parser, name)
+
+                self.api.device.cursor.move("left")
+                await asyncio.sleep(0.2)
+
+
+    def clear_dataset(self, dataset: Dataset | pd.DataFrame, coin: str = None, time: str = "5m", type_path: str = "processed"):
+        
+        dt = DatasetTimeseries(dataset.get_dataset().copy() if isinstance(dataset, Dataset) else dataset)
+        dt.clear_dataset()  
+        logger.info("Clear dataset for coin: %s, count Nan: %d", coin, len(dt.get_dataset_Nan()))
+        return dt
