@@ -1,9 +1,15 @@
+from core.utils.gui_deps import GUICheck
+
+# В файлах с GUI-логикой используйте:
+if GUICheck.has_gui_deps():
+    from PIL import Image
+    import pytesseract
+    import cv2 
+
 from datetime import datetime
 import re
-from PIL import Image
-import pytesseract
-import cv2 
 import numpy as np
+
 # pytesseract.pytesseract.tesseract_cmd = "C:/Program Files/Tesseract-OCR/tesseract.exe"
 
 months_rus_int = {"Дек": 12, "Ноя": 11, "Окт": 10, "Сен": 9, "Авг": 8, "Июл": 7, 

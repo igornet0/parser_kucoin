@@ -1,5 +1,7 @@
 __all__ = ("settings",
-            "DataManager",
+            "data_manager",
+            "setup_logging"
            )
+
 from core.settings import settings
-from core.data_manager import DataManager
+from core.DataManager import data_manager

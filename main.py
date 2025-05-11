@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 
 from handlers.att_parser import AttParser
 from handlers.parser_handler import Handler as HandlerParser
-from core.utils import setup_logging
+from core.utils.configure_logging import setup_logging
 
 # from core import DataManager
 

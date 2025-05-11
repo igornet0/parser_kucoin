@@ -8,11 +8,16 @@ from aioconsole import ainput
 from functools import wraps
 import os
 
-from parser_driver import ParserApi, ParserKucoin, KuCoinAPI
+from core.utils.gui_deps import GUICheck
+
+if GUICheck.has_gui_deps():
+    from parser_driver import ParserKucoin 
+
+from parser_driver import ParserApi, KuCoinAPI
 from core.models import Dataset, DatasetTimeseries
 from core.utils import AutoDecorator
-from core.utils import image_to_text
-from core import DataManager
+from core.utils.tesseract_img_text import image_to_text
+from core import data_manager
 
 import logging
 
@@ -21,8 +26,7 @@ logger = logging.getLogger("parser_logger.att")
 class AttParser:
 
     def __init__(self, api: ParserApi, pause: int = 60, clear: bool = False) -> None:
-        self.dm = DataManager()
-        self.coin_list: List[str] = self.dm.coin_list[::-1]
+        self.coin_list: List[str] = data_manager.coin_list[::-1]
         self.driver_lock = False
 
         self.pause = pause
@@ -110,7 +114,7 @@ class AttParser:
                   coin: str = "coin", time_parser: str = "5m") -> dict[str, Dataset]:
         """Save data to file"""
 
-        self.api.set_save_path(self.dm[path_type])
+        self.api.set_save_path(data_manager[path_type])
 
         if self.path_save is None:
             path_save = self.api.create_launch_dir()
@@ -321,7 +325,7 @@ class AttParser:
             for _ in range(count):
                 img = await self.api.get_element_datetime(get_img=True)
                 name = image_to_text(img)
-                self.dm.save_img(img, time_parser, name)
+                data_manager.save_img(img, time_parser, name)
 
                 self.api.device.cursor.move("left")
                 await asyncio.sleep(0.2)

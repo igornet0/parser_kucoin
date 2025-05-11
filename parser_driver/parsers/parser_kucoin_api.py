@@ -5,7 +5,6 @@ from kucoin.client import User, Trade, Market
 from parser_driver.api import ParserApi
 from core import settings 
 from core.models.dataset import Dataset
-from core.utils import setup_logging
 
 import logging
 
@@ -24,6 +23,34 @@ class KuCoinAPI(ParserApi):
 
     def get_account_summary_info(self):
         return self.user.get_account_summary_info()
+
+    @classmethod
+    def get_stat(cls, symbol: str, currency: str = "USDT") -> dict:
+        """
+        {
+            "time": 1602832092060, // time
+            "symbol": "BTC-USDT", // symbol
+            "buy": "11328.9", // bestAsk
+            "sell": "11329", // bestBid
+            "changeRate": "-0.0055", // 24h change rate
+            "changePrice": "-63.6", // 24h change price
+            "high": "11610", // 24h highest price
+            "low": "11200", // 24h lowest price
+            "vol": "2282.70993217", // 24h volume the aggregated trading volume in BTC
+            "volValue": "25984946.157790431", // 24h total, the trading volume in quote currency of last 24 hours
+            "last": "11328.9", // last price
+            "averagePrice": "11360.66065903", // 24h average transaction price yesterday
+            "takerFeeRate": "0.001", // Basic Taker Fee
+            "makerFeeRate": "0.001", // Basic Maker Fee
+            "takerCoefficient": "1", // Taker Fee Coefficient
+            "makerCoefficient": "1" // Maker Fee Coefficient
+        }
+        """
+        return cls.market.get_24hr_stats(f"{symbol}-{currency}")
+    
+    @classmethod
+    def get_orders_market(cls, symbol: str, currency: str = "USDT"):
+        return cls.market.get_order_book(f"{symbol}-{currency}")
 
     @classmethod
     def get_kline(cls, symbol: str, 
@@ -64,7 +91,7 @@ class KuCoinAPI(ParserApi):
             cls.logger.error(f"Error get kline {symbol}-{currency} - {len(df)=}")
             return None
         
-        df = df.drop(df.index[-1])
+        df = df.drop(df.index[0])
 
         df["datetime"] = df["datetime"].apply(lambda x: datetime.fromtimestamp(int(x)))
         

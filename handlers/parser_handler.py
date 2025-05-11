@@ -5,8 +5,15 @@ from typing import Dict, Any
 from inspect import signature, Parameter
 import pandas as pd
 
-from parser_driver.parsers import KuCoinAPI, ParserKucoin, ParserNews
-from parser_driver.api import ParserApi
+from core.utils.gui_deps import GUICheck
+
+if GUICheck.has_gui_deps():
+    from parser_driver import ParserKucoin, ParserNews
+else:
+    class ParserKucoin: pass
+    class ParserNews: pass
+
+from parser_driver import ParserApi, KuCoinAPI
 
 import logging
 

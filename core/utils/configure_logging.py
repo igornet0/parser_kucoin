@@ -2,9 +2,10 @@ import logging
 from logging.handlers import RotatingFileHandler
 from typing import Literal
 from pydantic import BaseModel
-from core.settings import settings
-from core import DataManager
 import sys
+
+from core.settings import settings
+from core import data_manager
 
 logging.getLogger("selenium").setLevel(logging.WARNING)
 logging.getLogger("undetected_chromedriver").setLevel(logging.WARNING)
@@ -54,12 +55,12 @@ def setup_logging():
     console_handler.setLevel(settings.logging.log_level)
     
     # Общий файловый хендлерs
-    common_handler = RotatingFileHandler(DataManager()["log"] / "all.log", maxBytes=1e6, backupCount=3)
+    common_handler = RotatingFileHandler(data_manager["log"] / "all.log", maxBytes=1e6, backupCount=3)
     common_handler.setFormatter(formatter)
 
     # Настройка для parser_logger
     parser_logger = logging.getLogger("parser_logger")
-    parser_handler = RotatingFileHandler(DataManager()["log"] / "parser_logger.log", maxBytes=1e6, backupCount=3)
+    parser_handler = RotatingFileHandler(data_manager["log"] / "parser_logger.log", maxBytes=1e6, backupCount=3)
     parser_handler.setFormatter(formatter)
     parser_handler.setLevel(settings.logging.log_level)
     parser_logger.addHandler(parser_handler)

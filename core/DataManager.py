@@ -1,10 +1,15 @@
-from pydantic import (
-    Field
-)
+from core.utils.gui_deps import GUICheck
+
+# В файлах с GUI-логикой используйте:
+if GUICheck.has_gui_deps():
+    from PIL import Image
+else:
+    class Image: pass
+
+from pydantic import Field
 from os import walk
 from pydantic_settings import BaseSettings
 from pathlib import Path
-from PIL import Image
 from typing import Optional, Literal, Any, Dict, Union, Generator
 import pandas as pd
 import aiofiles
@@ -332,3 +337,5 @@ class DataManager:
         await self.write_file(data, save_path, format="parquet")
         
         return save_path
+    
+data_manager = DataManager()

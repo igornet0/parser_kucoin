@@ -1,31 +1,39 @@
 from abc import abstractmethod
 import asyncio
+from core.utils.gui_deps import GUICheck
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.common.exceptions import TimeoutException
+if GUICheck.has_gui_deps():
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.remote.webelement import WebElement
+    from selenium.common.exceptions import TimeoutException
+    from PIL import Image
+    from core.utils import image_to_text, str_to_datatime
+    from .device_real import Device
+else:
+    # Заглушки для типизации
+    class By: XPATH = None  # noqa
+    class EC: pass  # noqa
+    class WebElement: pass  # noqa
+    class WebDriverWait: pass  # noqa
+    class TimeoutException: pass  # noqa
+    class Device: pass
+    class Image: pass  # noqa
 
 import pandas as pd
-from PIL import Image
 from threading import Event
 from typing import Any, Callable, Union, Generator
 import base64, json
-import threading
 from io import BytesIO
 from datetime import datetime
 from shutil import rmtree
 from os import path, listdir, mkdir
 
-from .device_real import Device
 from .web_driver import WebDriver
 from .data import DataParser
-
-from core import DataManager
+from core import data_manager
 from core.models import Dataset
-from core.utils import image_to_text, str_to_datatime
-
 
 import logging
 
@@ -40,8 +48,8 @@ class ParserApi:
         self.flag_open_web = False
 
         self.filename = None
-        self.path_trach = DataManager()["trach"]
-        self.path_save = DataManager()["raw"]
+        self.path_trach = data_manager["trach"]
+        self.path_save = data_manager["raw"]
         self.name_launch = "launch_parser"
 
         self.tick = tick

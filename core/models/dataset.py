@@ -1,9 +1,14 @@
 from __future__ import annotations
+from core.utils.gui_deps import GUICheck
+
+if GUICheck.has_gui_deps():
+    from matplotlib import pyplot as plt
+else:
+    class plt: pass
 
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from matplotlib import pyplot as plt
 from pathlib import PosixPath
 from urllib.parse import urlparse
 from typing import Union
@@ -18,7 +23,7 @@ from torch.utils.data import Dataset as _Dataset, DataLoader
 from transformers import BertTokenizer
 import torch
 
-from core import DataManager
+from core import data_manager
 from core.utils.clear_datasets import *
 from core.utils.tesseract_img_text import RU_EN_timetravel
 
@@ -71,7 +76,7 @@ class Dataset(_Dataset):
         else:
             self.targets = None
 
-        self.path_save = DataManager()["processed"]
+        self.path_save = data_manager["processed"]
 
     def get_datetime_last(self) -> datetime:
         return self.dataset['datetime'].iloc[-1]
