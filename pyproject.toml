@@ -18,8 +18,6 @@ setuptools = ">=78.1.0,<79.0.0"
 aiofiles = ">=24.1.0,<25.0.0"
 pyyaml = ">=6.0.2,<7.0.0"
 aioconsole = ">=0.8.1,<0.9.0"
-torch = ">=2.6.0,<3.0.0"
-transformers = ">=4.51.3,<5.0.0"
 
 [tool.poetry.group.gui.dependencies]
 sktime = ">=0.37.0,<0.38.0"

@@ -17,10 +17,6 @@ from typing import Union
 from os import walk, mkdir, path, getcwd
 import re
 
-from torch.utils.data import Dataset as _Dataset, DataLoader
-from transformers import BertTokenizer
-import torch
-
 from core import data_manager
 from core.utils.clear_datasets import *
 from core.utils.tesseract_img_text import RU_EN_timetravel
@@ -40,7 +36,7 @@ def timer(func):
     
     return wrapper
 
-class Dataset(_Dataset):
+class Dataset:
 
     def __init__(self, dataset: Union[pd.DataFrame, dict, str], transforms=None, target_column: str=None) -> None:
         
@@ -159,10 +155,10 @@ class Dataset(_Dataset):
         if self.transforms:
             sample = self.transforms(sample)
 
-        if self.targets:
-            target = self.targets.iloc[idx]
-            target = torch.tensor(target, dtype=torch.long)  
-            return sample, target
+        # if self.targets:
+        #     target = self.targets.iloc[idx]
+        #     target = torch.tensor(target, dtype=torch.long)  
+        #     return sample, target
 
         return sample, self.targets
 
@@ -285,88 +281,3 @@ class DatasetTimeseries(Dataset):
     
     def get_datetime_last(self) -> datetime:
         return self.dataset['datetime'].iloc[-1]
-
-
-class NewsDataset(Dataset):
-
-    def __init__(self, dataset, file_path: str, targets=None, tokenizer=BertTokenizer.from_pretrained('bert-base-uncased'), max_len=128):
-
-        """
-        Parameters
-        ----------
-        file_path : str
-            Path to file with news texts
-        targets : list or None, default=None
-            List of targets (labels or values for regression)
-        tokenizer : PreTrainedTokenizer, default=BertTokenizer.from_pretrained('bert-base-uncased')
-            BERT tokenizer
-        max_len : int, default=128
-            Maximum length of tokens
-        """
-
-        if path.exists(file_path):
-            file_name = DatasetTimeseries.searh_dateset(dataset)
-            file_path = path.join(dataset, file_name)
-            self.news = pd.read_csv(path.join(dataset, file_name),
-                                    parse_dates=["datetime"])
-            
-            if 'Unnamed: 0' in dataset.columns:
-                self.news.drop('Unnamed: 0', axis=1, inplace=True)
-        else:
-            raise ValueError("File not found")
-
-        self.file_path = file_path          
-        self.targets = targets                # Целевые значения (метки или значения для регрессии)
-        self.tokenizer = tokenizer            # Токенизатор BERT
-        self.max_len = max_len                # Максимальная длина токенов
-    
-
-    def get_loader(self):
-        return DataLoader(self, batch_size=2, shuffle=True)
-
-    
-    @classmethod
-    def get_domains(cls, news: pd.DataFrame):
-        if "url" in news.columns:
-            column = "url"
-        elif "news_url" in news.columns:
-            column = "news_url"
-        else:
-            return None
-        return news[column].apply(lambda x: urlparse(x).netloc).unique().tolist()
-
-    def get_news(self):
-        return self.news
-
-    def __len__(self):
-        return len(self.news)
-    
-    def __iter__(self):
-        for idx in range(len(self)):
-            yield self.news.iloc[idx]
-    
-    def __getitem__(self, idx):
-        # Получаем текст новости и его цену по индексу
-        news_text = self.news["text"].iloc[idx]
-        # prices = self.price_data[idx]
-        # target = self.targets[idx]
-        
-        # Токенизация текста с помощью BERT токенизатора
-        encoding = self.tokenizer.encode_plus(
-            news_text,
-            add_special_tokens=True,
-            max_length=self.max_len,
-            return_token_type_ids=False,
-            padding='max_length',
-            truncation=True,
-            return_attention_mask=True,
-            return_tensors='pt'
-        )
-        
-        # Возвращаем закодированные данные текста, цен и целевую метку
-        return {
-            'news_input_ids': encoding['input_ids'].flatten(),  # Извлекаем из тензора
-            'news_attention_mask': encoding['attention_mask'].flatten(),
-            # 'price_data': prices.float(),  # Преобразуем в float для LSTM
-            # 'target': torch.tensor(target, dtype=torch.float)  # Целевое значение (например, для регрессии)
-        }
