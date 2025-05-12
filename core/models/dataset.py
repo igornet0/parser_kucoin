@@ -9,10 +9,8 @@ else:
     class utils: pass
 
 import pandas as pd
-import numpy as np
 from datetime import datetime
 from pathlib import PosixPath
-from urllib.parse import urlparse
 from typing import Union
 from os import walk, mkdir, path, getcwd
 import re
