@@ -1,6 +1,5 @@
 import pandas as pd
 from datetime import datetime, timedelta
-from sktime.forecasting.base import ForecastingHorizon
 
 from core.utils.tesseract_img_text import timetravel_seconds_int
 

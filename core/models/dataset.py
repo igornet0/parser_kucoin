@@ -2,9 +2,11 @@ from __future__ import annotations
 from core.utils.gui_deps import GUICheck
 
 if GUICheck.has_gui_deps():
+    from sktime import utils
     from matplotlib import pyplot as plt
 else:
     class plt: pass
+    class utils: pass
 
 import pandas as pd
 import numpy as np
@@ -14,10 +16,6 @@ from urllib.parse import urlparse
 from typing import Union
 from os import walk, mkdir, path, getcwd
 import re
-
-from sklearn.preprocessing import MinMaxScaler
-from sktime import utils
-from sktime.forecasting.model_selection import temporal_train_test_split
 
 from torch.utils.data import Dataset as _Dataset, DataLoader
 from transformers import BertTokenizer
@@ -253,35 +251,6 @@ class DatasetTimeseries(Dataset):
     
     def duplicated(self):
         return self.dataset[self.dataset.duplicated(keep=False)]
-
-    def train_test_split(self, test_size: float = 30) -> None:
-        data = self.get_dataset()
-
-        data = data[['datetime', 'close']]  # Предположим, что мы используем только дату и цену закрытия
-        data.set_index('datetime', inplace=True)
-
-        # Нормализация данных
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_data = scaler.fit_transform(data[['close']].values)
-
-        # Генератор данных для обучения
-        def create_dataset(data, time_step=1):
-            X, y = [], []
-            for i in range(len(data) - time_step - 1):
-                X.append(data[i:(i + time_step), 0])
-                y.append(data[i + time_step, 0])
-            return np.array(X), np.array(y)
-
-        time_step = test_size  # Количество временных шагов
-        X, y = create_dataset(scaled_data, time_step)
-        X = X.reshape(X.shape[0], X.shape[1], 1)  # Преобразуем в 3D массив
-        self.train, self.test = temporal_train_test_split(y, X, 
-                                                          test_size=test_size)
-
-        utils.plot_series(self.train, self.test, labels=["train", "test"])
-        print(self.train.shape, self.test.shape)
-
-        return self.train, self.test
 
     def plot_series(self, dataset: list | None = None, param: str = "close") -> None:
         plt.figure(figsize=(12, 8))

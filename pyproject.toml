@@ -18,12 +18,11 @@ setuptools = ">=78.1.0,<79.0.0"
 aiofiles = ">=24.1.0,<25.0.0"
 pyyaml = ">=6.0.2,<7.0.0"
 aioconsole = ">=0.8.1,<0.9.0"
-scikit-learn = ">=1.6.1,<2.0.0"
-sktime = ">=0.37.0,<0.38.0"
 torch = ">=2.6.0,<3.0.0"
 transformers = ">=4.51.3,<5.0.0"
 
 [tool.poetry.group.gui.dependencies]
+sktime = ">=0.37.0,<0.38.0"
 undetected-chromedriver = ">=3.5.5,<4.0.0"
 pillow = ">=11.1.0,<12.0.0"
 opencv-python = ">=4.11.0.86,<5.0.0.0"
