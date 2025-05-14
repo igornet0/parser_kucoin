@@ -345,12 +345,11 @@ class ParserApi:
 
         try:
             await self.check_loop()
-            
             WebDriverWait(self.driver_instance, timeout).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
                 and len(d.find_elements(By.TAG_NAME, "body")) > 0
             )
-            await asyncio.sleep(1)
+            await asyncio.sleep(5)
             
             logger.info("Page loaded")
             return True

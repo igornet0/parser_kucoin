@@ -155,11 +155,9 @@ class ParserKucoin(ParserApi):
             if not await self.search_datetime(datetime_last):
                 raise ValueError("Datetime not found")
 
-        # task = asyncio.create_task(self.check_loop())
 
         await self.process_parser(init_counter)
         
-        # task.cancel()
         data = self.get_data_buffer()
 
         for data_d in filter(lambda x: isinstance(x["datetime"], Generator), data):
@@ -213,7 +211,7 @@ class ParserKucoin(ParserApi):
                     if data_d:
                         self.add_data_buffer(data_d)
 
-                        if len(self.get_data_buffer()) == init_counter // 10:
+                        if len(self.get_data_buffer()) % (init_counter // 10) == 0:
                             time_end = time.time()
                             time_buffer.append((time_end - time_start) / 60)
                             time_left = time_buffer[-1] * ((init_counter - len(self.get_data_buffer())) / (init_counter // 10))

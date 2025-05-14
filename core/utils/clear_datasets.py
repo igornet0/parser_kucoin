@@ -20,12 +20,12 @@ def volume_to_float(item: str) -> float:
     if item == "x":
         return item
     
-    volume_int = {"K": 10**3, "M": 1, "B": 10**(-3)}
+    volume_int = {"K": 10**3, "M": 10**6, "B": 10**9}
 
     if item[-1] not in volume_int.keys():
         return float(item)
     
-    return round(float(item.replace(item[-1], "")) / volume_int[item[-1]], 2)
+    return round(float(item.replace(item[-1], "")) * volume_int[item[-1]], 2)
 
 def convert_volume(dataset: pd.DataFrame, volume_column: str = "volume") -> pd.DataFrame:
     if volume_column not in dataset.columns:
