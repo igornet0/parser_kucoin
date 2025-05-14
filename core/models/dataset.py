@@ -83,10 +83,10 @@ class Dataset:
         return self.file_name
 
     def get_dataset(self) -> pd.DataFrame:
-        return self.dataset
+        return self.dataset.copy()
     
     def set_dataset(self, dataset: pd.DataFrame) -> None:
-        self.dataset = dataset
+        self.dataset = dataset.copy()
     
     def get_data(self, idx: int):
         return self.dataset.iloc[idx]
@@ -123,10 +123,27 @@ class Dataset:
             raise FileNotFoundError(f"File {pattern} not found in {root_dir}")
         
         return matched_files
-    
+
     @classmethod
-    def concat_dataset(cls, *dataset: pd.DataFrame | Dataset) -> pd.DataFrame:
-        return pd.concat([data.get_dataset() if isinstance(data, Dataset) else data for data in dataset], ignore_index=True)
+    def concat_dataset(
+        cls, 
+        *dataset: pd.DataFrame | Dataset
+    ) -> pd.DataFrame:
+        """
+        Объединяет DataFrame, добавляя отсутствующие строки из последующих датафреймов.
+        
+        :param dataset: Произвольное количество DataFrame или Dataset объектов
+        :return: Итоговый объединенный DataFrame
+        """
+        dataset = filter(lambda x: isinstance(x, pd.DataFrame) or isinstance(x, Dataset), dataset)
+        dataset = list(map(lambda x: x.get_dataset() if isinstance(x, Dataset) else x, dataset))
+        result = pd.concat(dataset, ignore_index=True)
+        dublicates = result.duplicated(subset=['datetime', "open"], keep=False)
+        dublicates = result[dublicates]
+        result.drop_duplicates(subset=['datetime', "open"], inplace=True)
+        result.drop_duplicates(subset=['datetime'], inplace=True)
+
+        return result
     
     def save_dataset(self, name_file: str = None) -> None:
         if not path.exists(self.path_save):
@@ -135,9 +152,9 @@ class Dataset:
         if name_file is None:
             name_file = self.file_name
 
-        # if path.exists(path.join(self.path_save, name_file)):
-        #     dataset = Dataset(path.join(self.path_save, name_file))
-        #     self.concat_dataset(self.dataset, dataset)
+        if path.exists(path.join(self.path_save, name_file)):
+            dataset = Dataset(path.join(self.path_save, name_file))
+            self.dataset = self.concat_dataset(self.get_dataset(), dataset)
 
         self.dataset.to_csv(path.join(self.path_save, name_file), index=False, encoding='utf-8')
         logger.info(f"Dataset saved to {path.join(self.path_save, name_file)}")

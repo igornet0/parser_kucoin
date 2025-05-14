@@ -64,13 +64,11 @@ class AttParser:
 
             self.driver_lock = True
 
-        func_pars = self.start_parser
-
         if save:
             self.flag_save = True
             self.save_type = save_type
 
-        data: dict[str, Dataset] = await func_pars(func_parser,
+        data: dict[str, Dataset] = await self.start_parser(func_parser,
                                                     check_stop,
                                                 coins_list, count, 
                                                 time_parser,
