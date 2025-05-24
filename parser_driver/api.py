@@ -472,8 +472,12 @@ class ParserApi:
     
     def get_pause_event(self) -> Event:
         return self.device.kb.get_pause_loop()
-
+    
     async def search_datetime(self, target_datetime: datetime, 
+                              right_break: bool = False) -> bool:
+        pass
+
+    async def search_datetime_v1(self, target_datetime: datetime, 
                               right_break: bool = False) -> bool:
         buffer_life = 3
         logger.info(f"Search datetime {target_datetime}")

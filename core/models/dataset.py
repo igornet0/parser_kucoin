@@ -138,8 +138,9 @@ class Dataset:
         dataset = filter(lambda x: isinstance(x, pd.DataFrame) or isinstance(x, Dataset), dataset)
         dataset = list(map(lambda x: x.get_dataset() if isinstance(x, Dataset) else x, dataset))
         result = pd.concat(dataset, ignore_index=True)
-        dublicates = result.duplicated(subset=['datetime', "open"], keep=False)
-        dublicates = result[dublicates]
+        # dublicates = result.duplicated(subset=['datetime', "open"], keep=False)
+        # dublicates = result[dublicates]
+        
         result.drop_duplicates(subset=['datetime', "open"], inplace=True)
         result.drop_duplicates(subset=['datetime'], inplace=True)
 

@@ -2,29 +2,31 @@ import asyncio
 from sys import argv
 from argparse import ArgumentParser
 
-from handlers.att_parser import AttParser
-from handlers.parser_handler import Handler as HandlerParser
 from core.utils.configure_logging import setup_logging
-
-# from core import DataManager
 
 def print_help():
     print("""Usage: python start_parser.py <time> [--pause=int] [--count=int] [--mode=api|driver]
             Arguments:
             time        : Time parameter for the parser (default: 5m)
             Options:
-            --pause     : Pause interval in minute (default: 60)
-            --save      : Save dataset (default: 0)
-            --save_type : Path to save dataset (default: raw)
-            --count     : Count parser datasets for coin, -1 - infinity (default: 100)
-            --mode      : Parser mode - 'api' or 'driver' (default: 'api')
-            --clear     : Clear dataset for all coins (default: 0)
-            --help      : Show this help message"""
+            --pause         : Pause interval in minute (default: 60)
+            --save          : Save dataset (default: 0)
+            --save_type     : Path to save dataset (default: raw)
+            --count         : Count parser datasets for coin, -1 - infinity (default: 100)
+            --mode          : Parser mode - 'api' or 'driver' (default: 'api')
+            --miss          : Parse missed data (default: 0)
+            --last_launch   : Parser last launch for save_type (default: 0)
+            --clear         : Clear dataset for all coins (default: 0)
+            --help          : Show this help message"""
           )
 
 
-async def start_parser(count: int, time_parser="5m", pause=60, mode="api",
-                       clear: bool = False, save: bool = 0, save_type: str = "raw"):
+async def start_parser(count: int, time_parser="5m", pause=60, mode="api", miss: bool = False,
+                       last_launch: bool = False, clear: bool = False, save: bool = False, 
+                       save_type: str = "raw"):
+    
+    from handlers.att_parser import AttParser
+    from handlers.parser_handler import Handler as HandlerParser
 
     if not mode in ["api", "driver"]:
         raise ValueError(f"Unknown mode: {mode}")
@@ -33,7 +35,10 @@ async def start_parser(count: int, time_parser="5m", pause=60, mode="api",
 
     att = AttParser(parser, pause, clear)
 
-    data = await att.parse(count=count, time_parser=time_parser, 
+    data = await att.parse(count=count, 
+                           miss=miss,
+                            last_launch=last_launch,
+                           time_parser=time_parser, 
                             save=save, save_type=save_type)
     
     if not data:
@@ -51,6 +56,8 @@ if __name__ == "__main__":
     parser.add_argument('--save', type=int, default=0, help='Save dataset (default: 0)')
     parser.add_argument('--save_type', default='raw', help='Path to save dataset (default: raw)')
     parser.add_argument('--mode', default='api', choices=['api', 'driver'], help="Parser mode (default: 'api')")
+    parser.add_argument('--miss',type=int, default=0, help='Parse missed data (default: 0)')
+    parser.add_argument('--last_launch',type=int, default=0, help='Parser last launch for save_type (default: 0)')
     parser.add_argument('--clear',type=int, default=0, help='Clear dataset for all coins (default: 0)')
     
     if "--help" in argv or "-h" in argv:
@@ -61,5 +68,6 @@ if __name__ == "__main__":
     
     # Парсинг аргументов
     args = parser.parse_args()
-    asyncio.run(start_parser(args.count, args.time, args.pause, mode=args.mode,
-                             clear=args.clear, save=args.save, save_type=args.save_type))
+    asyncio.run(start_parser(args.count, args.time, args.pause, mode=args.mode, miss=args.miss,
+                             last_launch=args.last_launch, clear=args.clear, save=args.save, 
+                             save_type=args.save_type))

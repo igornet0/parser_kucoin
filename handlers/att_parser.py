@@ -12,6 +12,9 @@ from core.utils.gui_deps import GUICheck
 
 if GUICheck.has_gui_deps():
     from parser_driver import ParserKucoin 
+else:
+    class ParserKucoin: pass
+
 
 from parser_driver import ParserApi, KuCoinAPI
 from core.models import Dataset, DatasetTimeseries
@@ -26,6 +29,7 @@ logger = logging.getLogger("parser_logger.att")
 class AttParser:
 
     def __init__(self, api: ParserApi, pause: int = 60, clear: bool = False) -> None:
+        
         self.coin_list: List[str] = data_manager.coin_list[::-1]
         self.driver_lock = False
 
@@ -43,7 +47,8 @@ class AttParser:
 
         self.api = api
     
-    async def parse(self, count: int = 10, time_parser="5m", 
+    async def parse(self, count: int = 10, miss: bool = False,
+                    last_launch: bool = False, time_parser="5m", 
                     save: bool = False, save_type: str = "raw",
                     *input_args) -> dict[str, pd.DataFrame]:
 
@@ -52,13 +57,19 @@ class AttParser:
         self.path_save = None
 
         if isinstance(self.api, KuCoinAPI):
+            if miss:
+                raise NotImplementedError("Missed data not implemented for KuCoinAPI")
+            
             func_parser = self.api.get_kline
             check_stop = self._check_stop_parser
             input_args = ('USDT', time_parser, *input_args)
 
         elif isinstance(self.api, ParserApi):
             self.api.set_timetravel(time_parser)
-            func_parser = self.api.start_parser
+            if miss and isinstance(self.api, ParserKucoin):
+                func_parser = self.api.parser_missing_data
+            else:
+                func_parser = self.api.start_parser
             check_stop = self._check_stop
             input_args = (count, )
 
@@ -282,7 +293,7 @@ class AttParser:
 
             all_dataframes.setdefault(coin, None)
 
-            if all_dataframes[coin] is None:
+            if not all_dataframes[coin] is None:
                 data = Dataset(Dataset.concat_dataset(all_dataframes[coin], data))
             
             # logger.warning(f"{coin}-{data.get_dataset()}")
