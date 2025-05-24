@@ -295,6 +295,8 @@ class AttParser:
 
             if not all_dataframes[coin] is None:
                 data = Dataset(Dataset.concat_dataset(all_dataframes[coin], data))
+            else:
+                data = Dataset(data)
             
             # logger.warning(f"{coin}-{data.get_dataset()}")
 
