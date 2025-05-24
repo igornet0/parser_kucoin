@@ -143,6 +143,7 @@ class AttParser:
                 dataset = self.clear_dataset(dataset, coin, time_parser)
 
             path_save_coin = os.path.join(path_save, coin)
+            
             dataset.set_path_save(path_save_coin)
             dataset.set_filename("{coin}_{time}.csv".format(coin=coin, time=time_parser))
             dataset.save_dataset()
@@ -293,10 +294,8 @@ class AttParser:
 
             all_dataframes.setdefault(coin, None)
 
-            if not all_dataframes[coin] is None:
-                data = Dataset(Dataset.concat_dataset(all_dataframes[coin], data))
-            else:
-                data = Dataset(data)
+            # if all_dataframes[coin] is None:
+            #     data = Dataset(Dataset.concat_dataset(all_dataframes[coin], data))
             
             # logger.warning(f"{coin}-{data.get_dataset()}")
 
