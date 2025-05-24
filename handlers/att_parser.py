@@ -294,6 +294,7 @@ class AttParser:
 
             if data is None:
                 logger.warning(f"Data for coin {coin} is None")
+                del buffer_processes[coin]
                 continue
 
             all_dataframes.setdefault(coin, None)
