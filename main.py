@@ -17,13 +17,14 @@ def print_help():
             --miss          : Parse missed data (default: 0)
             --last_launch   : Parser last launch for save_type (default: 0)
             --clear         : Clear dataset for all coins (default: 0)
+            --db_use        : Use database (default: 0)
             --help          : Show this help message"""
           )
 
 
 async def start_parser(count: int, time_parser="5m", pause=60, mode="api", miss: bool = False,
                        last_launch: bool = False, clear: bool = False, save: bool = False, 
-                       save_type: str = "raw"):
+                       db_use: bool = False, save_type: str = "raw"):
     
     from handlers.att_parser import AttParser
     from handlers.parser_handler import Handler as HandlerParser
@@ -34,6 +35,11 @@ async def start_parser(count: int, time_parser="5m", pause=60, mode="api", miss:
     parser = HandlerParser.get_parser(f"parser kucoin {mode}")
 
     att = AttParser(parser, pause, clear)
+
+    if db_use:
+        from core import db_helper
+        await db_helper.init_db()
+        att.init_db(db_helper)
 
     data = await att.parse(count=count, 
                            miss=miss,
@@ -58,6 +64,7 @@ if __name__ == "__main__":
     parser.add_argument('--mode', default='api', choices=['api', 'driver'], help="Parser mode (default: 'api')")
     parser.add_argument('--miss',type=int, default=0, help='Parse missed data (default: 0)')
     parser.add_argument('--last_launch',type=int, default=0, help='Parser last launch for save_type (default: 0)')
+    parser.add_argument('--db_use',type=int, default=0, help='Use database (default: 0)')
     parser.add_argument('--clear',type=int, default=0, help='Clear dataset for all coins (default: 0)')
     
     if "--help" in argv or "-h" in argv:
@@ -70,4 +77,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     asyncio.run(start_parser(args.count, args.time, args.pause, mode=args.mode, miss=args.miss,
                              last_launch=args.last_launch, clear=args.clear, save=args.save, 
-                             save_type=args.save_type))
+                             db_use=args.db_use, save_type=args.save_type))

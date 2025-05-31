@@ -25,7 +25,7 @@ class KuCoinAPI(ParserApi):
         return self.user.get_account_summary_info()
 
     @classmethod
-    def get_stat(cls, symbol: str, currency: str = "USDT") -> dict:
+    def get_stat_24hr(cls, symbol: str, currency: str = "USDT") -> dict:
         """
         {
             "time": 1602832092060, // time
@@ -90,8 +90,6 @@ class KuCoinAPI(ParserApi):
         if len(df) == 0:
             cls.logger.error(f"Error get kline {symbol}-{currency} - {len(df)=}")
             return None
-        
-        df = df.drop(df.index[0])
 
         df["datetime"] = df["datetime"].apply(lambda x: datetime.fromtimestamp(int(x)))
         

@@ -18,6 +18,8 @@ setuptools = ">=78.1.0,<79.0.0"
 aiofiles = ">=24.1.0,<25.0.0"
 pyyaml = ">=6.0.2,<7.0.0"
 aioconsole = ">=0.8.1,<0.9.0"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.41"}
+asyncpg = "^0.30.0"
 
 [tool.poetry.group.gui.dependencies]
 sktime = ">=0.37.0,<0.38.0"

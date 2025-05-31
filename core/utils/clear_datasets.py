@@ -3,22 +3,15 @@ from datetime import datetime, timedelta
 
 from core.utils.tesseract_img_text import timetravel_seconds_int
 
-# def safe_convert_datetime(date_str):
-#     try:
-#         # Пробуем преобразовать в datetime
-#         dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-#         # dt = pd.to_datetime(date_str, errors='raise')
-        
-#         # Проверяем, входит ли дата в допустимый диапазон pandas
-#         if dt < pd.Timestamp.min or dt > pd.Timestamp.max:
-#             return pd.NaT  # Возвращаем NaT для выходящих за пределы
-#         return dt
-#     except:
-#         return pd.NaT  # Обработка некорректных форматов
-
 def volume_to_float(item: str) -> float:
     if item == "x":
         return item
+    
+    if not isinstance(item, str):
+        return None
+    
+    if "," in item:
+        item = item.replace(",", "")
     
     volume_int = {"K": 10**3, "M": 10**6, "B": 10**9}
 
@@ -47,9 +40,53 @@ def convert_volume(dataset: pd.DataFrame, volume_column: str = "volume") -> pd.D
 
     return dataset
 
+def is_valid_row(row):
+    try:
+        # Проверка формата даты и времени
+        datetime.strptime(row['datetime'], '%Y-%m-%d %H:%M:%S')
+        
+        # Проверка числовых значений и логических соотношений
+        open_price = float(row['open'])
+        high = float(row['max'])
+        low = float(row['min'])
+        close = float(row['close'])
+        volume = float(row['volume'])
+        
+        return (low <= open_price <= high and 
+                low <= close <= high and 
+                volume >= 0)
+    
+    except (ValueError, TypeError, KeyError):
+        return False
+
+def find_most_common_df(dataset: pd.DataFrame) -> pd.DataFrame:
+    # Фильтрация валидных строк
+    # valid_mask = dataset.apply(is_valid_row, axis=1)
+    # valid_df = dataset[valid_mask]
+    
+    # if valid_df.empty:
+    #     return pd.DataFrame()
+    
+    # Группировка и подсчет повторений
+    grouped = dataset.groupby(dataset.columns.tolist()).size().reset_index(name='count')
+    
+    # Поиск максимального количества повторений
+    # Фильтрация строк с максимальным количеством повторений
+    result_df = grouped.drop(columns='count')
+    
+    return result_df.reset_index(drop=True)
+    
+
 def str_to_float(item: str) -> float | None:
+    if isinstance(item, int) or isinstance(item, float):
+        return item
+    
     if not isinstance(item, str):
+        print(item)
         return None
+    
+    elif item == "x":
+        return item
     
     result = item.replace(' ', '').replace(',', '.')
 
@@ -57,7 +94,7 @@ def str_to_float(item: str) -> float | None:
         return float(result)
     except ValueError:
         pass
-
+    print(item, result)
     return None
     
 def clear_datetime_false(df: pd.DataFrame, datetime_column: str = "datetime") -> pd.DataFrame:

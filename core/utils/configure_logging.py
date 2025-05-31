@@ -65,6 +65,13 @@ def setup_logging():
     parser_handler.setLevel(settings.logging.log_level)
     parser_logger.addHandler(parser_handler)
 
+    # database
+    database_logger = logging.getLogger("Database")
+    database_handler = RotatingFileHandler(data_manager["log"] / "database.log", maxBytes=1e6, backupCount=3)
+    database_handler.setFormatter(formatter)
+    database_handler.setLevel(settings.logging.log_level)
+    database_logger.addHandler(database_handler)
+
     root_logger.addHandler(console_handler)
     root_logger.addHandler(common_handler)
 

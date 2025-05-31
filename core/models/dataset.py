@@ -73,6 +73,9 @@ class Dataset:
     def get_datetime_last(self) -> datetime:
         return self.dataset['datetime'].iloc[-1]
     
+    def to_dict(self):
+        return self.dataset.to_dict()
+    
     def set_path_save(self, path_save: str) -> None:
         self.path_save = path_save
 
@@ -227,7 +230,7 @@ class DatasetTimeseries(Dataset):
         return self
 
     @timer
-    def clear_dataset(self) -> None:
+    def clear_dataset(self) -> pd.DataFrame:
         # self.dataset = clear_dataset(self.dataset, sort=True, timetravel=self.timetravel)
         dataset = self.dataset.copy()
 
@@ -240,8 +243,16 @@ class DatasetTimeseries(Dataset):
         dataset = convert_volume(dataset)
         logger.debug("Volume converted to float %d", len(dataset))
 
+        # dataset = dataset.drop_duplicates(subset=['datetime'], ignore_index=True)
+        grouped = find_most_common_df(dataset)
+
         dataset = dataset.drop_duplicates(subset=['datetime'], ignore_index=True)
+        dataset = pd.concat([grouped, dataset])
+
+        dataset = dataset.drop_duplicates(subset=['datetime'], ignore_index=True)
+
         dataset = conncat_missing_rows(dataset, timetravel=self.timetravel)
+        
         logger.debug("Missing rows concatenated %d", len(dataset))
 
         dataset = dataset.drop_duplicates(subset=['datetime'], ignore_index=True)
@@ -251,9 +262,8 @@ class DatasetTimeseries(Dataset):
                                         ignore_index=True,
                                         ascending=False)
         logger.debug("Dataset sorted %d", len(dataset))
-        self.dataset = dataset
         
-        return self
+        return dataset
     
     def set_timetravel(self, timetravel: str):
         if not timetravel in RU_EN_timetravel.keys() or timetravel.isdigit():

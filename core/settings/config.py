@@ -14,10 +14,11 @@ class AppBaseConfig:
     env_nested_delimiter="__"
     extra = "ignore"
 
+
 class LoggingConfig(BaseSettings):
     
     model_config = SettingsConfigDict(**AppBaseConfig.__dict__, 
-                                      env_prefix="LOGGING_")
+                                      env_prefix="LOGGING__")
     
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO")
     format: str = LOG_DEFAULT_FORMAT
@@ -28,10 +29,11 @@ class LoggingConfig(BaseSettings):
     def log_level(self) -> int:
         return getattr(logging, self.level)
 
+
 class ConfigParserDriver(BaseSettings):
 
     model_config = SettingsConfigDict(**AppBaseConfig.__dict__, 
-                                      env_prefix="DRIVER_")
+                                      env_prefix="DRIVER__")
     
     url_parsing: str = Field(default=...)
 
@@ -45,6 +47,36 @@ class ConfigParserDriver(BaseSettings):
     
     def get_url(self, coin: str) -> str:
         return self.url_parsing.replace("{coin}", coin)
+    
+
+class ConfigDatabase(BaseSettings):
+
+    model_config = SettingsConfigDict(**AppBaseConfig.__dict__, 
+                                      env_prefix="DATABASE__")
+    
+    user: str = Field(default=...)
+    password: str = Field(default=...)
+    host: str = Field(default="localhost")
+    db_name: str = Field(default="db_name")
+    port: int = Field(default=5432)
+
+    echo: bool = Field(default=False)
+    echo_pool: bool = Field(default=False)
+    pool_size: int = Field(default=20)
+    max_overflow: int = 10
+    pool_timeout: int = 30
+
+    naming_convention: dict[str, str] = {
+        "ix": "ix_%(column_0_label)s",
+        "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "pk": "pk_%(table_name)s",
+    }
+    
+    def get_url(self) -> str:
+        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}"
+
 
 class ConfigParser(BaseSettings):
 
@@ -60,5 +92,6 @@ class ConfigParser(BaseSettings):
 
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     driver: ConfigParserDriver = Field(default_factory=ConfigParserDriver)
+    database: ConfigDatabase = Field(default_factory=ConfigDatabase)
 
 settings = ConfigParser()

@@ -7,10 +7,10 @@ else:
     class Image: pass
 
 from pydantic import Field
-from os import walk
+from os import walk, listdir
 from pydantic_settings import BaseSettings
 from pathlib import Path
-from typing import Optional, Literal, Any, Dict, Union, Generator
+from typing import Optional, Literal, Any, Dict, Union, Generator, Callable
 import pandas as pd
 import aiofiles
 import json
@@ -97,12 +97,21 @@ class DataManager:
         dt = pd.DataFrame(new_list, columns=["name"])
         dt.to_csv(self.settings.COIN_LIST_PATH)
 
+    def get_last_launch(self) -> Path:
+        paths = list(self.get_path("raw", filter_path=lambda x: "launch_parser" in str(x.name)))
+
+        if not paths:
+            return None
+        
+        return max(paths, key=lambda x: int(str(x.name).split("_")[-1]))
+
     def get_path(
         self,
         data_type: Literal["raw", "processed", "cached", "backup"],
         coin: Optional[str] = None,
         dataset_type: Optional[str] = None,
-        timetravel: Optional[str] = None
+        timetravel: Optional[str] = None,
+        filter_path: Optional[Callable] = lambda x: True
     ) -> Generator[Path, None, None]:
         """
         Генерирует путь к данным на основе параметров
@@ -110,14 +119,30 @@ class DataManager:
 
         base_path = self.required_dirs[data_type]
 
+        if not coin and not dataset_type and not timetravel:
+            for dirs in listdir(base_path):
+                if not filter_path(Path(base_path) / dirs):
+                    continue
+
+                yield Path(base_path) / dirs
+
         for root, dirs, files in walk(base_path):
             if not all(map(lambda x: ".csv" in x, files)):
                 continue
 
             for file in files:
-                if coin and file.startswith(coin):
-                    if timetravel and file.endswith(f"_{timetravel}.csv"):
+
+                if coin:
+                    if not coin in file.replace("_", "-").split("-"):
+                        continue
+
+                if (timetravel and file.endswith(f"{timetravel}.csv")) or dataset_type:
+                    if (dataset_type and file.startswith(f"{dataset_type}")) or not dataset_type:
+                        if not filter_path(Path(root) / file):
+                            continue
+
                         yield Path(root) / file
+
 
     def save_img(self, img: Image, time_parser: str = "5m", name: str = "img") -> None:
         path = self.create_dir("raw", "img")
@@ -250,7 +275,8 @@ class DataManager:
         
         return True
 
-    def create_dir(self, type_dir: str, name_of_dir: str) -> None:
+    def create_dir(self, type_dir: Literal["raw", "processed", "cached", "backup"], 
+                   name_of_dir: str) -> Path:
         """
         Создание директории
         """

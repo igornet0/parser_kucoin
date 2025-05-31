@@ -6,6 +6,7 @@ import pandas as pd
 import multiprocessing as mp
 from aioconsole import ainput
 from functools import wraps
+import copy
 import os
 
 from core.utils.gui_deps import GUICheck
@@ -18,9 +19,11 @@ else:
 
 from parser_driver import ParserApi, KuCoinAPI
 from core.models import Dataset, DatasetTimeseries
+from core.database.orm_query import (orm_add_data_timeseries, orm_add_timeseries,
+                                     orm_get_timeseries_by_coin, orm_update_coin_price)
 from core.utils import AutoDecorator
 from core.utils.tesseract_img_text import image_to_text
-from core import data_manager
+from core import data_manager, Database
 
 import logging
 
@@ -46,6 +49,10 @@ class AttParser:
         self.path_save = None
 
         self.api = api
+        self.db = None
+
+    def init_db(self, db: Database):
+        self.db = db
     
     async def parse(self, count: int = 10, miss: bool = False,
                     last_launch: bool = False, time_parser="5m", 
@@ -53,8 +60,11 @@ class AttParser:
                     *input_args) -> dict[str, pd.DataFrame]:
 
         coins_list = list(map(lambda x: x.strip(), self.coin_list))
-
-        self.path_save = None
+        
+        if not last_launch:
+            self.path_save = None
+        else:
+            self.path_save = data_manager.get_last_launch()
 
         if isinstance(self.api, KuCoinAPI):
             if miss:
@@ -119,14 +129,60 @@ class AttParser:
 
         return queue
     
-    def save_data(self, data: dict[str, Dataset] | Dataset, path_type: str = "raw", 
+    def get_timesireas_data_genersater(self, dataset: dict):
+        dataset_dict = copy.deepcopy(dataset)
+        while dataset_dict:
+            pop_list = []
+            new_data = {}
+            for key in dataset_dict.keys():
+                for i, data in dataset_dict[key].items():
+                    if key == "datetime":
+                         data = str(data)
+
+                    new_data[key] = data
+                    pop_list.append(i)
+                    break
+            
+            for key in dataset_dict.keys():
+                for i in pop_list:
+                    dataset_dict[key].pop(i)
+                    break
+            
+                if not dataset_dict[key]:
+                    dataset_dict = {}
+                    break
+
+            yield new_data
+
+    async def dataset_clear(self, coin: str, time_parser: str, dataset: Dataset, processed_dir, filename):
+        new_dataset: DatasetTimeseries = self.clear_dataset(dataset, coin, time_parser)
+        dataset.set_dataset(new_dataset.get_dataset())
+        dataset.set_path_save(processed_dir)
+        dataset.set_filename(filename)
+        dataset.save_dataset()
+
+        if self.db:
+            async with self.db.get_session() as session:
+                ts = await orm_get_timeseries_by_coin(session, coin, time_parser)
+                dataset_dict = dataset.to_dict()
+                for data in self.get_timesireas_data_genersater(dataset_dict):
+                    if data.get("open") == "x":
+                        continue
+                    
+                    result = await orm_add_data_timeseries(session, ts.id, data_timeseries=data)
+                    if not result:
+                        break
+    
+    async def save_data(self, data: dict[str, Dataset] | Dataset, path_type: str = "raw", 
                   coin: str = "coin", time_parser: str = "5m") -> dict[str, Dataset]:
         """Save data to file"""
 
         self.api.set_save_path(data_manager[path_type])
 
         if self.path_save is None:
-            path_save = self.api.create_launch_dir()
+            if path_type == "raw":
+                path_save = self.api.create_launch_dir()
+
             self.path_save = path_save
         else:
             path_save = self.path_save
@@ -138,16 +194,42 @@ class AttParser:
             data = {coin: data}
             
         for coin, dataset in data.items():
-
-            if self.flag_clear:
-                dataset = self.clear_dataset(dataset, coin, time_parser)
-
+        
             path_save_coin = os.path.join(path_save, coin)
+            filename = "{coin}_{time}.csv".format(coin=coin, time=time_parser)
+
+            if not self.flag_clear:
+                full_path_save_coin = os.path.join(path_save_coin, filename)
+            else:
+                data_manager.create_dir("processed", coin)
+                path_save = data_manager.create_dir("processed", coin + "/" + time_parser)
+                full_path_save_coin = os.path.join(path_save, filename)
+
+            if self.db:
+                async with self.db.get_session() as session:
+                    await orm_add_timeseries(session, coin, time_parser, full_path_save_coin)
+        
 
             dataset.set_path_save(path_save_coin)
-            dataset.set_filename("{coin}_{time}.csv".format(coin=coin, time=time_parser))
+            dataset.set_filename(filename)
+
+            if isinstance(self.api, KuCoinAPI):
+                dataset_new = dataset.get_dataset().copy()
+
+                if self.db:
+                    price_now = float(dataset_new.iloc[0]["close"])
+                    async with self.db.get_session() as session:
+                        await orm_update_coin_price(session, coin, price_now=price_now)
+
+                dataset_new = dataset_new.drop(dataset_new.index[0])
+                dataset.set_dataset(dataset_new)
+
             dataset.save_dataset()
+
             logger.info("Save data for coin: %s, count: %d", coin, len(dataset))
+            
+            if self.flag_clear:
+                await self.dataset_clear(coin, time_parser, dataset, path_save, filename)
 
         return data
 
@@ -299,13 +381,9 @@ class AttParser:
 
             all_dataframes.setdefault(coin, None)
 
-            # if all_dataframes[coin] is None:
-            #     data = Dataset(Dataset.concat_dataset(all_dataframes[coin], data))
-            
-            # logger.warning(f"{coin}-{data.get_dataset()}")
-
             if isinstance(data, Dataset) and self.flag_save:
-                data = self.save_data(data, self.save_type, coin, time_parser)[coin]
+                data = await self.save_data(data, self.save_type, coin, time_parser)
+                data = data[coin]
 
             all_dataframes[coin] = data
 
@@ -345,10 +423,11 @@ class AttParser:
                 self.api.device.cursor.move("left")
                 await asyncio.sleep(0.2)
 
-
-    def clear_dataset(self, dataset: Dataset | pd.DataFrame, coin: str = None, time: str = "5m", type_path: str = "processed"):
+    def clear_dataset(self, dataset: Dataset | pd.DataFrame, coin: str = None, time: str = "5m"):
         
-        dt = DatasetTimeseries(dataset.get_dataset().copy() if isinstance(dataset, Dataset) else dataset)
-        dt.clear_dataset()  
+        dt = DatasetTimeseries(dataset.get_dataset().copy() if isinstance(dataset, Dataset) else dataset,
+                               timetravel=time)
+        dt.set_dataset(dt.clear_dataset())
+        
         logger.info("Clear dataset for coin: %s, count Nan: %d", coin, len(dt.get_dataset_Nan()))
         return dt
