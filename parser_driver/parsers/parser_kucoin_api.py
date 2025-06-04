@@ -4,7 +4,7 @@ from kucoin.client import User, Trade, Market
 
 from parser_driver.api import ParserApi
 from core import settings 
-from core.models.dataset import Dataset
+from core.models.dataset import DatasetTimeseries
 
 import logging
 
@@ -55,7 +55,8 @@ class KuCoinAPI(ParserApi):
     @classmethod
     def get_kline(cls, symbol: str, 
                   currency: str = "USDT",
-                  time: str = "5m") -> Dataset: 
+                  time: str = "5m",
+                  last_datetime: datetime = None) -> DatasetTimeseries | None: 
         """
         "1545904980", //Start time of the candle cycle "0.058", 
         //opening price "0.049", 
@@ -66,7 +67,7 @@ class KuCoinAPI(ParserApi):
         //Transaction volume 143676
         """
 
-        cls.logger.info(f"Get coin: {symbol} time: {time=}")
+        cls.logger.info(f"Get coin: {symbol} time: {time=} last_datetime: {last_datetime=}")
         
         if time[-1] == "m":
             time = time.replace("m", "min")
@@ -95,6 +96,9 @@ class KuCoinAPI(ParserApi):
         
         df["datetime"] = pd.to_datetime(df['datetime'])
 
+        if last_datetime is not None:
+            df = df[df["datetime"] >= last_datetime]
+
         if "day" in time or "week" in time:
             df["datetime"] = df["datetime"].dt.strftime('%Y-%m-%d')
         else:
@@ -102,4 +106,4 @@ class KuCoinAPI(ParserApi):
 
         df["volume"] = df["volume"].apply(float)
 
-        return Dataset(df)
+        return DatasetTimeseries(df)

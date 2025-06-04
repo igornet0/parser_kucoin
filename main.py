@@ -22,7 +22,7 @@ def print_help():
           )
 
 
-async def start_parser(count: int, time_parser="5m", pause=60, mode="api", miss: bool = False,
+async def start_parser(count: int, time_parser="5m", pause: float=60, mode="api", miss: bool = False,
                        last_launch: bool = False, clear: bool = False, save: bool = False, 
                        db_use: bool = False, save_type: str = "raw"):
     
@@ -57,7 +57,7 @@ async def start_parser(count: int, time_parser="5m", pause=60, mode="api", miss:
 if __name__ == "__main__":    
     parser = ArgumentParser(description='Coin Parser', add_help=False)
     parser.add_argument('time', nargs='?', default="5m", help='Time parameter (default: 5m)')
-    parser.add_argument('--pause', type=int, default=60, help='Pause interval (default: 60)')
+    parser.add_argument('--pause', type=float, default=60, help='Pause interval (default: 60)')
     parser.add_argument('--count', type=int, default=100, help='Count parser datasets for coin, -1 - infinity (default: 100)')
     parser.add_argument('--save', type=int, default=0, help='Save dataset (default: 0)')
     parser.add_argument('--save_type', default='raw', help='Path to save dataset (default: raw)')

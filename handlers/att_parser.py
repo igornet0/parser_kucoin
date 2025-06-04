@@ -20,6 +20,7 @@ else:
 from parser_driver import ParserApi, KuCoinAPI
 from core.models import Dataset, DatasetTimeseries
 from core.database.orm_query import (orm_add_data_timeseries, orm_add_timeseries,
+                                     orm_get_coin_by_name, orm_add_coin,
                                      orm_get_timeseries_by_coin, orm_update_coin_price)
 from core.utils import AutoDecorator
 from core.utils.tesseract_img_text import image_to_text
@@ -28,6 +29,8 @@ from core import data_manager, Database
 import logging
 
 logger = logging.getLogger("parser_logger.att")
+
+BUFFER_SIZE = 100
 
 class AttParser:
 
@@ -40,7 +43,7 @@ class AttParser:
 
         # Autoclear
         self.flag_clear = clear
-        self.buffer_data = []
+        self.buffer_data = {}
         self.autodecorator = AutoDecorator(self)
 
         self.flag_save = False
@@ -54,6 +57,19 @@ class AttParser:
     def init_db(self, db: Database):
         self.db = db
     
+    async def _load_last_launch(self, time_parser):
+        self.path_save = data_manager.get_last_launch()
+        tmp = self.flag_save
+        self.flag_save = False
+        if self.path_save:
+            logger.info(f"Last launch: {self.path_save}")
+            for coin in data_manager.get_path_from(self.path_save):
+                for csv_file in data_manager.get_path_from(coin, filter_path=lambda x: time_parser in str(x.name)):
+                    dt = DatasetTimeseries(csv_file, timetravel=time_parser)
+                    await self.add_buffer_data(coin.name, dt, time_parser)
+
+        self.flag_save = tmp
+                
     async def parse(self, count: int = 10, miss: bool = False,
                     last_launch: bool = False, time_parser="5m", 
                     save: bool = False, save_type: str = "raw",
@@ -64,7 +80,8 @@ class AttParser:
         if not last_launch:
             self.path_save = None
         else:
-            self.path_save = data_manager.get_last_launch()
+            await self._load_last_launch(time_parser)
+
 
         if isinstance(self.api, KuCoinAPI):
             if miss:
@@ -80,6 +97,7 @@ class AttParser:
                 func_parser = self.api.parser_missing_data
             else:
                 func_parser = self.api.start_parser
+
             check_stop = self._check_stop
             input_args = (count, )
 
@@ -137,7 +155,9 @@ class AttParser:
             for key in dataset_dict.keys():
                 for i, data in dataset_dict[key].items():
                     if key == "datetime":
-                         data = str(data)
+                        data = str(data)
+                    else:
+                        data = float(data)
 
                     new_data[key] = data
                     pop_list.append(i)
@@ -155,25 +175,20 @@ class AttParser:
             yield new_data
 
     async def dataset_clear(self, coin: str, time_parser: str, dataset: Dataset, processed_dir, filename):
-        new_dataset: DatasetTimeseries = self.clear_dataset(dataset, coin, time_parser)
+        
+        new_dataset = self.clear_dataset(dataset, coin, time_parser)
+        
         dataset.set_dataset(new_dataset.get_dataset())
         dataset.set_path_save(processed_dir)
         dataset.set_filename(filename)
+
+        await self.update_db_timeseries_path(coin, dataset, time_parser)
+
         dataset.save_dataset()
 
-        if self.db:
-            async with self.db.get_session() as session:
-                ts = await orm_get_timeseries_by_coin(session, coin, time_parser)
-                dataset_dict = dataset.to_dict()
-                for data in self.get_timesireas_data_genersater(dataset_dict):
-                    if data.get("open") == "x":
-                        continue
-                    
-                    result = await orm_add_data_timeseries(session, ts.id, data_timeseries=data)
-                    if not result:
-                        break
+        logger.debug("Save clear data for coin: %s, count: %d in %s", coin, len(dataset), dataset.get_path_save())
     
-    async def save_data(self, data: dict[str, Dataset] | Dataset, path_type: str = "raw", 
+    async def save_data(self, dataset: DatasetTimeseries, path_type: str = "raw", 
                   coin: str = "coin", time_parser: str = "5m") -> dict[str, Dataset]:
         """Save data to file"""
 
@@ -186,52 +201,88 @@ class AttParser:
             self.path_save = path_save
         else:
             path_save = self.path_save
-
-        if isinstance(data, DatasetTimeseries):
-            data = {data.timetravel: data}
-        elif isinstance(data, Dataset):
-
-            data = {coin: data}
             
-        for coin, dataset in data.items():
+        path_save_coin = os.path.join(path_save, coin)
+        filename = "{coin}_{time}.csv".format(coin=coin, time=time_parser)
+    
+        dataset.set_path_save(path_save_coin)
+        dataset.set_filename(filename)
+
+        dataset.save_dataset()
+
+        logger.info("Save data for coin: %s, count: %d in %s", coin, len(dataset), dataset.get_path_save())
         
-            path_save_coin = os.path.join(path_save, coin)
-            filename = "{coin}_{time}.csv".format(coin=coin, time=time_parser)
+        if self.flag_clear:
+            path_save = data_manager["processed"]
+            path_save = data_manager.create_dir("processed", coin)
+            path_save = data_manager.create_dir("processed", coin + "/" + time_parser)
+            await self.dataset_clear(coin, time_parser, dataset, path_save, filename)
 
-            if not self.flag_clear:
-                full_path_save_coin = os.path.join(path_save_coin, filename)
-            else:
-                data_manager.create_dir("processed", coin)
-                path_save = data_manager.create_dir("processed", coin + "/" + time_parser)
-                full_path_save_coin = os.path.join(path_save, filename)
+        return dataset
 
-            if self.db:
-                async with self.db.get_session() as session:
-                    await orm_add_timeseries(session, coin, time_parser, full_path_save_coin)
-        
+    async def update_db_timeseries(self, coin: str, dataset: DatasetTimeseries, time_parser: str):
+        if self.db and self.flag_save:    
+            async with self.db.get_session() as session:
+                ts = await orm_get_timeseries_by_coin(session, coin, time_parser)
 
-            dataset.set_path_save(path_save_coin)
-            dataset.set_filename(filename)
+                if isinstance(self.api, KuCoinAPI):
+                    dataset.sort(ascending=False)
+                    dataset_new = dataset.get_dataset()
+                    dataset_new = dataset_new.drop(dataset_new.index[0])
+                    dataset.set_dataset(dataset_new)
+                    dataset.sort()
 
-            if isinstance(self.api, KuCoinAPI):
-                dataset_new = dataset.get_dataset().copy()
+                logger.debug("Update_db_timeseries data for coin: %s, count: %d", coin, len(dataset))
 
-                if self.db:
-                    price_now = float(dataset_new.iloc[0]["close"])
-                    async with self.db.get_session() as session:
-                        await orm_update_coin_price(session, coin, price_now=price_now)
+                dataset_dict = dataset.to_dict()
 
-                dataset_new = dataset_new.drop(dataset_new.index[0])
-                dataset.set_dataset(dataset_new)
+                for data in self.get_timesireas_data_genersater(dataset_dict):
+                    if data.get("open") == "x":
+                        continue
+                    
+                    await orm_add_data_timeseries(session, ts.id, data_timeseries=data)
 
-            dataset.save_dataset()
+    async def update_db_timeseries_path(self, coin: str, dataset: DatasetTimeseries, time_parser: str):
+        if self.db and self.flag_save:    
+            async with self.db.get_session() as session:
+                await orm_add_timeseries(session, coin, time_parser, str(dataset.get_path_save()))
+    
+    async def update_db_last_price(self, coin: str, dataset: DatasetTimeseries):
+        if self.db  and self.flag_save:
+            async with self.db.get_session() as session:
+                data = dataset.get_last_row()
 
-            logger.info("Save data for coin: %s, count: %d", coin, len(dataset))
+                if isinstance(data["close"].item(), str) and data["close"].item() == "x":
+                    return False
+                        
+                await orm_update_coin_price(session, coin, price_now=float(data["close"].item()))
+
+                return True
+
+    async def add_buffer_data(self, coin: str, data: DatasetTimeseries, time_parser: str = "5m"):
+        self.buffer_data.setdefault(coin, {})
+        self.buffer_data[coin].setdefault(time_parser, None)
+
+        if not await self.update_db_last_price(coin, data):
+            logger.debug("Last price not update for coin: %s", coin)
+
+        if self.buffer_data[coin][time_parser] is None:
+            self.buffer_data[coin][time_parser] = data
+        else:
+            self.buffer_data[coin][time_parser] = DatasetTimeseries(DatasetTimeseries.concat_dataset(self.buffer_data[coin][time_parser], data))
+
+        await self.update_db_timeseries(coin, self.buffer_data[coin][time_parser], time_parser)
+
+        logger.debug("Add data to buffer for coin: %s, count: %d", coin, len(self.buffer_data[coin][time_parser]))
+
+        if len(self.buffer_data[coin][time_parser]) >= BUFFER_SIZE:
+            if self.flag_save:
+                await self.save_data(self.buffer_data[coin][time_parser], self.save_type, coin, time_parser)
             
-            if self.flag_clear:
-                await self.dataset_clear(coin, time_parser, dataset, path_save, filename)
+            self.buffer_data[coin][time_parser].pop_last_row(BUFFER_SIZE // 2)
 
-        return data
+    def get_data_from_buffer(self, coin, time_parser):
+        return self.buffer_data.get(coin, {}).get(time_parser, None)
 
     async def start_parser(self, func_parser:Callable, 
                             check_stop: Callable,
@@ -264,14 +315,12 @@ class AttParser:
                     coins, 
                     buffer_processes,
                     result_queue,
+                    time_parser,
                     count_cpu,
                     *args
                 )
 
-                # Сбор результатов
-                await self._collect_results(result_queue, all_dataframes, buffer_processes, time_parser)
-
-                await asyncio.sleep(0.1)
+                await self._collect_results(result_queue, buffer_processes, time_parser)
 
         # except Exception as e:
         #     logger.error(f"Parser error - {e}")
@@ -281,8 +330,6 @@ class AttParser:
             self._cleanup_processes(buffer_processes)
 
         logger.info("End parser  - %s", datetime.now())
-
-        return all_dataframes
     
     def _check_stop_parser(self, stop_event, count, all_dataframes, len_coins):
         return len(list(filter(lambda list: len(list)==count, all_dataframes.values()))) != len_coins
@@ -309,7 +356,7 @@ class AttParser:
     #         await asyncio.sleep(0.1)
 
     async def _manage_processes(self, func_parser, coins, buffer_processes, 
-                                result_queue, count_cpu, *args):
+                                result_queue, time_parser, count_cpu, *args):
         
         """Управление пулом процессов"""
         for coin, last_time in coins.items():
@@ -317,46 +364,44 @@ class AttParser:
                 break
         
             if self._should_process_coin(last_time, self.pause):
-                if self.buffer_data:
-                    coins_last = self.buffer_data.pop()
-                    dataset: DatasetTimeseries = coins_last[coin]
-
-                    logger.info("Start coin: %s with data from buffer %s", coin, len(dataset))
-                    
-                    if self.driver_lock:
-                        last_datetime = dataset.get_dataset()["datetime"].min()
-                        args = (*args, last_datetime)
+                if self.get_data_from_buffer(coin, time_parser):
+                    dataset: DatasetTimeseries = self.get_data_from_buffer(coin, time_parser)
+                    last_datetime = dataset.get_datetime_last() - timedelta(minutes=self.pause % 5 * 5 + self.pause)
+                    logger.debug("Start coin: %s with data from buffer %s last_datetime: %s", coin, len(dataset), last_datetime)
                 else:
-                    logger.info(f"Start new coin: {coin}")
+                    logger.debug(f"Start new coin: {coin}")
+                    last_datetime = None
 
                 await self._start_process_for_coin(
                         func_parser,
                         coin,
                         buffer_processes,
                         result_queue,
+                        last_datetime,
                         *args
                     )
+                
                 coins[coin] = datetime.now()
 
     async def _start_process_for_coin(self, func_parser: Callable, coin: str, 
-                                buffer_processes, result_queue, *args):
+                                buffer_processes, result_queue, last_datetime, *args):
         
         """Запуск процесса для конкретной монеты"""
         if not self.driver_lock:
             p = mp.Process(target=self._wrapper, 
-                            args=(func_parser, result_queue, (coin, *args), (coin,)),
+                            args=(func_parser, result_queue, (coin, *args, last_datetime), (coin,)),
                             daemon=True)
             
             logger.debug(f"Start process for coin: {coin}")
             p.start()
 
         else:
-            await self._async_wrapper(func_parser, result_queue, (coin, *args), (coin,))
+            await self._async_wrapper(func_parser, result_queue, (coin, *args, last_datetime), (coin,))
             p = None
 
         buffer_processes[coin] = p
 
-    async def _collect_results(self, result_queue, all_dataframes, buffer_processes, time_parser):
+    async def _collect_results(self, result_queue, buffer_processes, time_parser):
         """Сбор результатов из очереди"""
         while not result_queue.empty():
             # coin, *data = result_queue.get()
@@ -366,7 +411,7 @@ class AttParser:
                 continue
 
             coin = data[0]
-            data: Dataset = data[1:]
+            data: DatasetTimeseries = data[1:]
 
             if len(data) == 0:
                 continue
@@ -376,18 +421,9 @@ class AttParser:
 
             if data is None:
                 logger.warning(f"Data for coin {coin} is None")
-                del buffer_processes[coin]
-                continue
-
-            all_dataframes.setdefault(coin, None)
-
-            if isinstance(data, Dataset) and self.flag_save:
-                data = await self.save_data(data, self.save_type, coin, time_parser)
-                data = data[coin]
-
-            all_dataframes[coin] = data
-
-            logger.info("Get data for coin: %s, count: %d", coin, len(all_dataframes[coin]))
+            else:
+                await self.add_buffer_data(coin, data, time_parser)
+                logger.debug("Get data for coin: %s, count: %d", coin, len(self.get_data_from_buffer(coin, time_parser)))
 
             del buffer_processes[coin]
 
@@ -425,9 +461,9 @@ class AttParser:
 
     def clear_dataset(self, dataset: Dataset | pd.DataFrame, coin: str = None, time: str = "5m"):
         
-        dt = DatasetTimeseries(dataset.get_dataset().copy() if isinstance(dataset, Dataset) else dataset,
+        dt = DatasetTimeseries(dataset.get_dataset() if isinstance(dataset, Dataset) else dataset,
                                timetravel=time)
         dt.set_dataset(dt.clear_dataset())
         
-        logger.info("Clear dataset for coin: %s, count Nan: %d", coin, len(dt.get_dataset_Nan()))
+        logger.debug("Clear dataset for coin: %s, count Nan: %d", coin, len(dt.get_dataset_Nan()))
         return dt

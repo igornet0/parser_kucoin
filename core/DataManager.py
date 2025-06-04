@@ -104,10 +104,13 @@ class DataManager:
             return None
         
         return max(paths, key=lambda x: int(str(x.name).split("_")[-1]))
+    
+    def get_path_from(self, path: Path, filter_path: Optional[Callable] = lambda x: True) -> Generator[Path, None, None]:
+        yield from list(self.get_path(path, filter_path=filter_path))
 
     def get_path(
         self,
-        data_type: Literal["raw", "processed", "cached", "backup"],
+        data_type: Literal["raw", "processed", "cached", "backup"] | Path = "raw",
         coin: Optional[str] = None,
         dataset_type: Optional[str] = None,
         timetravel: Optional[str] = None,
@@ -116,8 +119,10 @@ class DataManager:
         """
         Генерирует путь к данным на основе параметров
         """
-
-        base_path = self.required_dirs[data_type]
+        if isinstance(data_type, Path):
+            base_path = data_type
+        else:
+            base_path = self.required_dirs[data_type]
 
         if not coin and not dataset_type and not timetravel:
             for dirs in listdir(base_path):
@@ -125,6 +130,7 @@ class DataManager:
                     continue
 
                 yield Path(base_path) / dirs
+            return
 
         for root, dirs, files in walk(base_path):
             if not all(map(lambda x: ".csv" in x, files)):
@@ -282,6 +288,10 @@ class DataManager:
         """
         try:
             path = self.required_dirs[type_dir] / name_of_dir
+            if path.exists():
+                logger.debug(f"Directory already exists: {path}")
+                return path
+            
             path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Directory created: {path}")
             return path

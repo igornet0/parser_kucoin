@@ -29,7 +29,7 @@ def timer(func):
         result = func(*args, **kwargs)
         end_time = datetime.now()
         execution_time = end_time - start_time
-        logger.info(f"Function {func.__name__} executed in {execution_time}")
+        logger.debug(f"Function {func.__name__} executed in {execution_time}")
         return result
     
     return wrapper
@@ -46,11 +46,15 @@ class Dataset:
     
             dataset = pd.read_csv(path_open)
             self.set_filename(str(path_open).split("/")[-1])
+            self.set_path_save(str(path_open).split("/")[-2])
 
         elif not isinstance(dataset, pd.DataFrame):
             logger.error(f"Invalid dataset type {type(dataset)}")
-            self.set_filename("clear_dataset.csv")
+            raise ValueError(f"Invalid dataset type {type(dataset)}")
         
+        else:
+            self.path_save = data_manager["processed"]
+
         self.drop_unnamed(dataset)
 
         if "date" in dataset.columns:
@@ -68,8 +72,6 @@ class Dataset:
         else:
             self.targets = None
 
-        self.path_save = data_manager["processed"]
-
     def get_datetime_last(self) -> datetime:
         return self.dataset['datetime'].iloc[-1]
     
@@ -78,6 +80,9 @@ class Dataset:
     
     def set_path_save(self, path_save: str) -> None:
         self.path_save = path_save
+
+    def get_path_save(self) -> str:
+        return self.path_save
 
     def set_filename(self, file_name: str) -> None:
         self.file_name = file_name
@@ -222,11 +227,16 @@ class DatasetTimeseries(Dataset):
 
         self.timetravel = timetravel
 
+    def pop_last_row(self, n: int):
+        self.sort()
+        self.dataset = self.dataset[-n:]
+        return self
+
     @timer
-    def sort(self):
-        self.dataset = self.dataset.sort_values(by='datetime', 
+    def sort(self, column: str = "datetime", ascending: bool = True):
+        self.dataset = self.dataset.sort_values(by=column, 
                                         ignore_index=True,
-                                        ascending=True)
+                                        ascending=ascending)
         return self
 
     @timer
@@ -306,4 +316,8 @@ class DatasetTimeseries(Dataset):
         return self.dataset.loc[self.dataset['open'] != "x"]
     
     def get_datetime_last(self) -> datetime:
-        return self.dataset['datetime'].iloc[-1]
+        return self.dataset['datetime'].max()
+    
+    def get_last_row(self) -> pd.Series:
+        return self.dataset[self.dataset['datetime'] == self.get_datetime_last()]
+
