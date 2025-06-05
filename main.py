@@ -39,7 +39,7 @@ async def start_parser(count: int, time_parser="5m", pause: float=60, mode="api"
     if db_use:
         from core import db_helper
         await db_helper.init_db()
-        att.init_db(db_helper)
+        await att.init_db(db_helper)
 
     data = await att.parse(count=count, 
                            miss=miss,
