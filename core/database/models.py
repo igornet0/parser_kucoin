@@ -1,5 +1,5 @@
 # модели для БД
-from sqlalchemy import ForeignKey, Float, String
+from sqlalchemy import ForeignKey, Float, String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database.base import Base
@@ -9,6 +9,8 @@ class Coin(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), unique=True)
     price_now: Mapped[float] = mapped_column(Float, default=0)
+
+    parsed: Mapped[bool] = mapped_column(Boolean, default=True)
 
     timeseries: Mapped[list['Timeseries']] = relationship(back_populates='coin')
 

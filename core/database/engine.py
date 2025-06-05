@@ -57,7 +57,7 @@ class Database:
                 await session.close()
 
     async def _create_tables(self):
-        from core.database.orm_query import orm_add_coin
+        from core.database.orm_query import orm_add_coin, orm_change_parsing_status_coin
 
         async with self.engine.begin() as conn:
             logger.info("Creating tables")
@@ -67,6 +67,7 @@ class Database:
             for coin in data_manager.coin_list:
                 logger.info(f"Adding coin {coin}")
                 await orm_add_coin(session, coin)
+                await orm_change_parsing_status_coin(session, coin, True)
 
 db_helper = Database(
     url=settings.database.get_url(),

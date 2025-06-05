@@ -31,6 +31,16 @@ async def orm_get_coin_by_name(session: AsyncSession, name: str) -> Coin:
     result = await session.execute(query)
     return result.scalar()
 
+async def orm_get_coins(session: AsyncSession) -> Coin:
+    query = select(Coin)
+    result = await session.execute(query)
+    return result.scalars().all()
+
+async def orm_change_parsing_status_coin(session: AsyncSession, name: str, status: bool) -> Coin:
+    query = update(Coin).where(Coin.name == name).values(parsed=status)
+    await session.execute(query)
+    await session.commit()
+
 async def orm_update_coin_price(session: AsyncSession, name: str, price_now: float):
     query = update(Coin).where(Coin.name == name).values(price_now=price_now)
     await session.execute(query)
