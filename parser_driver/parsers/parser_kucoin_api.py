@@ -1,7 +1,9 @@
+import asyncio
 import pandas as pd
 from datetime import datetime
 from kucoin.client import User, Trade, Market
-
+import aiohttp
+import asyncio
 from parser_driver.api import ParserApi
 from core import settings 
 from core.models.dataset import DatasetTimeseries
@@ -20,6 +22,8 @@ class KuCoinAPI(ParserApi):
     market = Market(*args_entry)
 
     logger = logging.getLogger("parser_logger.KuCoinAPI")
+
+    max_concurrent = 100  # Максимальное количество одновременных запросов
 
     def get_account_summary_info(self):
         return self.user.get_account_summary_info()
@@ -51,6 +55,77 @@ class KuCoinAPI(ParserApi):
     @classmethod
     def get_orders_market(cls, symbol: str, currency: str = "USDT"):
         return cls.market.get_order_book(f"{symbol}-{currency}")
+
+    @classmethod
+    async def async_parsed_coins(cls, symbols: list[str], 
+                                 currency: str = "USDT",
+                                time: str = "5m",
+                                last_datetimes: list[datetime] = None) -> dict[str, DatasetTimeseries | None]:
+        
+        if last_datetimes is None:
+            last_datetimes = [None] * len(symbols)
+
+        semaphore = asyncio.Semaphore(cls.max_concurrent)
+        
+        async def fetch(session, symbol, last_dt):
+            async with semaphore:
+                return await cls.async_get_kline(session, symbol, currency, time, last_dt)
+        
+        async with aiohttp.ClientSession() as session:
+            tasks = [fetch(session, sym, dt) for sym, dt in zip(symbols, last_datetimes)]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+        return {sym: result if not isinstance(result, Exception) else None 
+                for sym, result in zip(symbols, results)}
+
+    @classmethod
+    async def async_get_kline(cls, session, symbol: str, 
+                             currency: str = "USDT",
+                             time: str = "5m",
+                             last_datetime: datetime = None) -> DatasetTimeseries | None:
+
+        # cls.logger.info(f"Get coin: {symbol} time: {time=} last_datetime: {last_datetime=}")
+        
+        if time[-1] == "m":
+            time = time.replace("m", "min")
+        elif time[-1] == "H":
+            time = time.replace("H", "hour")
+        elif time[-1] == "D":
+            time = time.replace("D", "day")
+        elif time[-1] == "W":
+            time = time.replace("W", "week")
+
+        try:
+            data = await cls.market.async_get_kline(session, f"{symbol}-{currency}", time)
+        except Exception as e:
+            cls.logger.error(f"Error get kline {symbol}-{currency} - {e}")
+            return None
+
+        colums = ["datetime", "open", "close", "max", "min", "_", "volume"]
+
+        df = pd.DataFrame(data, columns=colums).drop("_", axis=1)
+
+        if len(df) == 0:
+            cls.logger.error(f"Error get kline {symbol}-{currency} - {len(df)=}")
+            return None
+
+        df["datetime"] = df["datetime"].apply(lambda x: datetime.fromtimestamp(int(x)))
+        
+        df["datetime"] = pd.to_datetime(df['datetime'])
+
+        if last_datetime is not None:
+            df = df[df["datetime"] >= last_datetime]
+
+        if "day" in time or "week" in time:
+            df["datetime"] = df["datetime"].dt.strftime('%Y-%m-%d')
+        else:
+            df["datetime"] = df["datetime"].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        df["volume"] = df["volume"].apply(float)
+
+        df = DatasetTimeseries(df)
+
+        return df
 
     @classmethod
     def get_kline(cls, symbol: str, 

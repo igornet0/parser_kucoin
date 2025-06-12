@@ -63,8 +63,8 @@ class ConfigDatabase(BaseSettings):
     echo: bool = Field(default=False)
     echo_pool: bool = Field(default=False)
     pool_size: int = Field(default=20)
-    max_overflow: int = 10
-    pool_timeout: int = 30
+    max_overflow: int = 50
+    pool_timeout: int = 5
 
     naming_convention: dict[str, str] = {
         "ix": "ix_%(column_0_label)s",

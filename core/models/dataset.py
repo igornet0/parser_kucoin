@@ -227,8 +227,7 @@ class DatasetTimeseries(Dataset):
 
         self.timetravel = timetravel
 
-    def pop_last_row(self, n: int):
-        self.sort()
+    def pop_last_row(self, n: int = 1) -> DatasetTimeseries:
         self.dataset = self.dataset[-n:]
         return self
 

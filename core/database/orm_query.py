@@ -1,10 +1,18 @@
 # файл для query запросов
-
+from datetime import datetime
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
+from pydantic import BaseModel
 
 from core.database.models import (Coin, Timeseries, DataTimeseries)
+
+class PriceData(BaseModel):
+    price_now: float
+    max_price_now: float
+    min_price_now: float
+    open_price_now: float
+    volume_now:float
 
 ##################### Добавляем монеты в БД #####################################
 
@@ -41,8 +49,12 @@ async def orm_change_parsing_status_coin(session: AsyncSession, name: str, statu
     await session.execute(query)
     await session.commit()
 
-async def orm_update_coin_price(session: AsyncSession, name: str, price_now: float):
-    query = update(Coin).where(Coin.name == name).values(price_now=price_now)
+async def orm_update_coin_price(session: AsyncSession, name: str, price_data: PriceData):
+    query = update(Coin).where(Coin.name == name).values(price_now=price_data.price_now,
+                                                          max_price_now=price_data.max_price_now,
+                                                          min_price_now=price_data.min_price_now,
+                                                          open_price_now=price_data.open_price_now,
+                                                          volume_now=price_data.volume_now)
     await session.execute(query)
     await session.commit()
 
@@ -101,7 +113,7 @@ async def orm_get_data_timeseries(session: AsyncSession, timeseries_id: int):
     result = await session.execute(query)
     return result.scalars().all()
 
-async def orm_get_data_timeseries_by_datetime(session: AsyncSession, timeseries_id: int, datetime: str):
+async def orm_get_data_timeseries_by_datetime(session: AsyncSession, timeseries_id: int, datetime: datetime):
     query = select(DataTimeseries).where(DataTimeseries.timeseries_id == timeseries_id, DataTimeseries.datetime == datetime)
     result = await session.execute(query)
     return result.scalars().first()
