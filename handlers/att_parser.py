@@ -325,12 +325,20 @@ class AttParser:
         await self.update_coin_list(self.db)
 
         pop_list = []
+        coins_list = copy.deepcopy(self.coin_list)
+        
         for coin in coins.keys():
-            if coin not in self.coin_list:
+            if coin not in coins_list:
                 pop_list.append(coin)
+            else:
+                coins_list.remove(coin)
 
         for coin in pop_list:
             coins.pop(coin)
+
+        if coins_list:
+            for coin in coins_list:
+                coins[coin] = None
 
         return coins
             
