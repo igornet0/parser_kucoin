@@ -64,7 +64,6 @@ class AttParser:
         async with self.db.get_session() as session:
             coins = await orm_get_coins(session)
             self.coin_list = list(map(lambda x: x.name, filter(lambda x: x.parsed, coins)))
-            self.coin_list = self.coin_list[:5]
             # for coin in coins:
             #     if coin.name not in self.coin_list:
             #         self.coin_list.append(coin.name)
@@ -252,6 +251,11 @@ class AttParser:
         if self.db:    
             async with self.db.get_session() as session:
                 ts = await orm_get_timeseries_by_coin(session, coin, time_parser)
+
+                if not ts:
+                    dataset.set_path_save(data_manager["processed"] / coin )
+                    ts = await orm_add_timeseries(session, coin=coin, timestamp=time_parser,
+                                                  path_dataset=str(dataset.get_path_save()))
 
                 # if isinstance(self.api, KuCoinAPI):
                 #     datetime_last = dataset.get_datetime_last() - timedelta(minutes=1)

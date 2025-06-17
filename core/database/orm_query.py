@@ -76,6 +76,10 @@ async def orm_add_timeseries(session: AsyncSession, coin: Coin | str, timestamp:
     session.add(timeseries)
     await session.commit()
 
+    await session.refresh(timeseries)
+
+    return timeseries
+
 async def orm_update_timeseries_path(session: AsyncSession, timeseries_id: int, path_dataset: str):
     query = update(Timeseries).where(Timeseries.id == timeseries_id).values(path_dataset=path_dataset)
     await session.execute(query)
