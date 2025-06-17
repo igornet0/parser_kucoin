@@ -227,6 +227,12 @@ class DatasetTimeseries(Dataset):
 
         self.timetravel = timetravel
 
+    def append(self, data: pd.DataFrame) -> DatasetTimeseries:
+        self.dataset = self.concat_dataset(self.dataset, data)
+        self.dataset.drop_duplicates(subset=['datetime'], ignore_index=True, inplace=True)
+        self.sort(ascending=False)
+        return self
+
     def pop_last_row(self, n: int = 1) -> DatasetTimeseries:
         self.dataset = self.dataset[-n:]
         return self
