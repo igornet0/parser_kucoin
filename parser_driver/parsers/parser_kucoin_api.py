@@ -96,10 +96,6 @@ class KuCoinAPI(ParserApi):
         elif time[-1] == "W":
             time = time.replace("W", "week")
 
-        from random import randint
-        if randint(0, 50) > 50:
-            raise Exception("Random error")
-
         try:
             data = await cls.market.async_get_kline(session, f"{symbol}-{currency}", time)
         except Exception as e:
