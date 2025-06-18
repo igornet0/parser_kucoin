@@ -1,5 +1,5 @@
 # модели для БД
-from sqlalchemy import DateTime, ForeignKey, Float, String, Boolean
+from sqlalchemy import DateTime, ForeignKey, Float, String, Integer, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database.base import Base
@@ -40,3 +40,30 @@ class DataTimeseries(Base):
     min: Mapped[float] = mapped_column(Float)
     close: Mapped[float] = mapped_column(Float)
     volume: Mapped[float] = mapped_column(Float)
+
+
+class TelegramChannel(Base):
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True)
+    chat_id: Mapped[str] = mapped_column(String(50), unique=True)
+    parsed: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class NewsUrl(Base):
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String(200), unique=True)
+    a_pup: Mapped[Float] = mapped_column(Float, default=0.9)
+    parsed: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class News(Base):
+    
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    type: Mapped[str] = mapped_column(String(50), default="news")
+    id_url: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    text: Mapped[str] = mapped_column(String(1000), nullable=False)
+    date: Mapped[DateTime] = mapped_column(DateTime, default=func.now())
+

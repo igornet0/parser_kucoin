@@ -57,7 +57,7 @@ class Database:
                 await session.close()
 
     async def _create_tables(self):
-        from core.database.orm_query import orm_add_coin
+        from core.database import orm_add_coin
 
         async with self.engine.begin() as conn:
             logger.info("Creating tables")

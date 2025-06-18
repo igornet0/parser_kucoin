@@ -22,9 +22,9 @@ logger = logging.getLogger("parser_logger.Handler")
 class Handler:
 
     _parsers = {
-        "parser kucoin driver": ParserKucoin,
-        "parser kucoin api": KuCoinAPI,
-        "parser news": ParserNews,
+        "parser kucoin_driver": ParserKucoin,
+        "parser kucoin_api": KuCoinAPI,
+        "parser news_api": ParserNews,
         "parser api": ParserApi
     }
 

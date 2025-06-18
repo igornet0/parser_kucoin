@@ -12,11 +12,12 @@ import logging
 
 class KuCoinAPI(ParserApi):
         
-    api_key = settings.api_key
-    api_secret = settings.api_secret
-    api_passphrase = settings.api_passphrase
+    api_key = settings.kucoin.api_key
+    api_secret = settings.kucoin.api_secret
+    api_passphrase = settings.kucoin.api_passphrase
 
-    args_entry = (settings.api_key, settings.api_secret, settings.api_passphrase)
+    args_entry = (api_key, api_secret, api_passphrase)
+    
     user = User(*args_entry)
     trade = Trade(*args_entry)
     market = Market(*args_entry)
@@ -73,8 +74,8 @@ class KuCoinAPI(ParserApi):
                 return result
         
         async with aiohttp.ClientSession() as session:
-            tasks = [fetch(session, sym, dt) for sym, dt in coins_last_datetime.items()]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # tasks = [fetch(session, sym, dt) for sym, dt in coins_last_datetime.items()]
+            results = await asyncio.gather(*[fetch(session, sym, dt) for sym, dt in coins_last_datetime.items()], return_exceptions=True)
             
         return results
 

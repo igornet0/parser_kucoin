@@ -28,6 +28,16 @@ class LoggingConfig(BaseSettings):
     @property
     def log_level(self) -> int:
         return getattr(logging, self.level)
+    
+
+class TelegramConfig(BaseSettings):
+
+    model_config = SettingsConfigDict(**AppBaseConfig.__dict__, 
+                                      env_prefix="TG__")
+    api_id: str = Field(default=...)
+    api_hash: str = Field(default=...)
+    phone: str = Field(default=...)
+
 
 
 class ConfigParserDriver(BaseSettings):
@@ -78,20 +88,26 @@ class ConfigDatabase(BaseSettings):
         return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}"
 
 
-class ConfigParser(BaseSettings):
+class KucoinConfig(BaseSettings):
 
-    model_config = SettingsConfigDict(
-        **AppBaseConfig.__dict__,
-        env_prefix="KUCOIN__"
-    )
-    """Конфигурация для KuCoin API"""
-
+    model_config = SettingsConfigDict(**AppBaseConfig.__dict__, 
+                                      env_prefix="KUCOIN__")
+    
     api_key: str = Field(default=...)
     api_secret: str = Field(default=...)
     api_passphrase: str = Field(default=...)
 
+
+class ConfigParser(BaseSettings):
+
+    model_config = SettingsConfigDict(
+        **AppBaseConfig.__dict__,
+    )
+
+    kucoin: KucoinConfig = Field(default_factory=KucoinConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     driver: ConfigParserDriver = Field(default_factory=ConfigParserDriver)
     database: ConfigDatabase = Field(default_factory=ConfigDatabase)
+    tg: TelegramConfig = Field(default_factory=TelegramConfig)
 
 settings = ConfigParser()

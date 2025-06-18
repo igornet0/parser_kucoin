@@ -19,11 +19,7 @@ else:
 
 from parser_driver import ParserApi, KuCoinAPI
 from core.models import Dataset, DatasetTimeseries
-from core.database.orm_query import (orm_add_data_timeseries, orm_add_timeseries,
-                                     PriceData,
-                                     orm_get_coin_by_name, orm_add_coin, orm_get_coins,
-                                     orm_change_parsing_status_coin,
-                                     orm_get_timeseries_by_coin, orm_update_coin_price)
+from core.database.orm import *
 from core.utils import AutoDecorator
 from core.utils.tesseract_img_text import image_to_text
 from core import data_manager, Database
@@ -164,7 +160,6 @@ class AttParser:
             result = await func(*input_args)
             # logger.debug(f"Result {func.__name__} {result}")
             queue.put((*output_args, result))
-
         except Exception as e:
             logger.error(f"Error processing {func.__name__} {e}")
             queue.put(None)
@@ -312,6 +307,9 @@ class AttParser:
         self.buffer_data.setdefault(coin, {})
         self.buffer_data[coin].setdefault(time_parser, None)
 
+        if data is None:
+            return
+
         await self.update_db_last_price(coin, data)
         # logger.debug(f"{coin} - {data.get_datetime_last()=}")
         data_pd = data.get_dataset()
@@ -332,17 +330,6 @@ class AttParser:
                 await self.save_data(self.buffer_data[coin][time_parser], self.save_type, coin, time_parser)
             
             self.buffer_data[coin][time_parser].pop_last_row(BUFFER_SIZE // 2)
-
-
-
-
-
-
-
-
-
-
-
 
 
         # self.buffer_data.setdefault(coin, {})

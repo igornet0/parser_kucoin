@@ -13,7 +13,7 @@ def print_help():
             --save          : Save dataset (default: 0)
             --save_type     : Path to save dataset (default: raw)
             --count         : Count parser datasets for coin, -1 - infinity (default: 100)
-            --mode          : Parser mode - 'api' or 'driver' (default: 'api')
+            --mode          : Parser mode - 'kucoin_api' or 'kucoin_driver' or 'news_api' (default: 'kucoin_api')
             --miss          : Parse missed data (default: 0)
             --last_launch   : Parser last launch for save_type (default: 0)
             --clear         : Clear dataset for all coins (default: 0)
@@ -29,10 +29,10 @@ async def start_parser(count: int, time_parser="5m", pause: float=60, mode="api"
     from handlers.att_parser import AttParser
     from handlers.parser_handler import Handler as HandlerParser
 
-    if not mode in ["api", "driver"]:
+    if not mode in ["kucoin_api", "kucoin_driver", "news_api"]:
         raise ValueError(f"Unknown mode: {mode}")
     
-    parser = HandlerParser.get_parser(f"parser kucoin {mode}")
+    parser = HandlerParser.get_parser(f"parser {mode}")
 
     att = AttParser(parser, pause, clear)
 
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     parser.add_argument('--count', type=int, default=100, help='Count parser datasets for coin, -1 - infinity (default: 100)')
     parser.add_argument('--save', type=int, default=0, help='Save dataset (default: 0)')
     parser.add_argument('--save_type', default='raw', help='Path to save dataset (default: raw)')
-    parser.add_argument('--mode', default='api', choices=['api', 'driver'], help="Parser mode (default: 'api')")
+    parser.add_argument('--mode', default='kucoin_api', choices=['kucoin_api', 'kucoin_driver', 'news_api'], help="Parser mode (default: 'kucoin_api')")
     parser.add_argument('--miss',type=int, default=0, help='Parse missed data (default: 0)')
     parser.add_argument('--last_launch',type=int, default=0, help='Parser last launch for save_type (default: 0)')
     parser.add_argument('--db_use',type=int, default=0, help='Use database (default: 0)')
