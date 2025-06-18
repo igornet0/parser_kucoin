@@ -656,8 +656,8 @@ class AttParser:
             if len(data) == 0:
                 continue
 
-            if len(data) == 1:
-                data = data[0]
+            # if len(data) == 1:
+            #     data = data[0]
 
             if isinstance(data, list):
                 for coin, dt in data:
