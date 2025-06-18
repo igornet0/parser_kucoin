@@ -648,7 +648,7 @@ class AttParser:
         while not result_queue.empty():
             # coin, *data = result_queue.get()
             data = result_queue.get()
-
+            
             if data is None:
                 continue
             elif isinstance(data, list):
