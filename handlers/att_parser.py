@@ -156,10 +156,12 @@ class AttParser:
     async def _async_wrapper(func: Callable, queue: mp.Queue, input_args: tuple, output_args: tuple = None):
         """Wrapper to get data and put result in queue"""
         try:
-            output_args = output_args if isinstance(output_args, tuple) else (output_args, )
+            if output_args:
+                output_args = output_args if isinstance(output_args, tuple) else (output_args, )
+
             result = await func(*input_args)
             # logger.debug(f"Result {func.__name__} {result}")
-            queue.put((*output_args, result))
+            queue.put((*output_args, result) if output_args is not None else result)
         except Exception as e:
             logger.error(f"Error processing {func.__name__} {e}")
             queue.put(None)
@@ -649,29 +651,26 @@ class AttParser:
 
             if data is None:
                 continue
-
-            coin = data[0]
-            data = data[1:]
-
-            if len(data) == 0:
-                continue
-
-            # if len(data) == 1:
-            #     data = data[0]
-
-            if isinstance(data, list):
+            elif isinstance(data, list):
                 for coin, dt in data:
                     if dt is None:
                         logger.warning(f"Data for coin {coin} is None")
                         continue
 
                     all_dataframes[coin] = dt
-                    # logger.error("Parser Get data for coin: %s, count: %d", coin, len(dt))
-            elif data is None:
-                logger.warning(f"Data for coin {coin} is None")
             else:
-                all_dataframes[coin] = data
-                # logger.debug("Parser Get data for coin: %s, count: %d", coin, len(data))
+                coin = data[0]
+                data = data[1:]
+
+                if len(data) == 0:
+                    continue
+                elif len(data) == 1:
+                    data = data[0]
+
+                if data is None:
+                    logger.warning(f"Data for coin {coin} is None")
+                else:
+                    all_dataframes[coin] = data
         
         return all_dataframes
 
