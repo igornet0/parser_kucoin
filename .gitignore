@@ -8,6 +8,7 @@ __pycache__/
 # C extensions
 *.so
 *.session
+session.session-journal
 .DS_Store
 poetry.lock
 /data/*

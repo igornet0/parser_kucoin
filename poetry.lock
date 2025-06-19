@@ -655,6 +655,21 @@ files = [
 ]
 
 [[package]]
+name = "emoji"
+version = "2.14.1"
+description = "Emoji for Python"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "emoji-2.14.1-py3-none-any.whl", hash = "sha256:35a8a486c1460addb1499e3bf7929d3889b2e2841a57401903699fef595e942b"},
+    {file = "emoji-2.14.1.tar.gz", hash = "sha256:f8c50043d79a2c1410ebfae833ae1868d5941a67a6cd4d18377e2eb0bd79346b"},
+]
+
+[package.extras]
+dev = ["coverage", "pytest (>=7.4.4)"]
+
+[[package]]
 name = "evdev"
 version = "1.9.2"
 description = "Bindings to the Linux input handling subsystem"
@@ -6876,4 +6891,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "bbf06e15b8a95f6930823045d2a7a504631676a15cb7e79987ec40831ea54304"
+content-hash = "1803ed7971340e617d882c76a2e3bf8fa04e7b7cb76fd549a3ea7c2041f52a11"

@@ -59,14 +59,14 @@ class Database:
     async def _create_tables(self):
         from core.database import orm_add_coin
 
-        async with self.engine.begin() as conn:
-            logger.info("Creating tables")
-            await conn.run_sync(Base.metadata.create_all)
+        # async with self.engine.begin() as conn:
+        #     logger.info("Creating tables")
+        #     await conn.run_sync(Base.metadata.create_all)
 
-        async with self.async_session() as session:
-            for coin in data_manager.coin_list:
-                logger.debug(f"Adding coin {coin}")
-                await orm_add_coin(session, coin)
+        # async with self.async_session() as session:
+        #     for coin in data_manager.coin_list:
+        #         logger.debug(f"Adding coin {coin}")
+        #         await orm_add_coin(session, coin)
 
 db_helper = Database(
     url=settings.database.get_url(),

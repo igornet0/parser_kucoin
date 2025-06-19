@@ -1,5 +1,5 @@
 # модели для БД
-from sqlalchemy import DateTime, ForeignKey, Float, String, Integer, Boolean, func
+from sqlalchemy import DateTime, ForeignKey, Float, String, BigInteger, Integer, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database.base import Base
@@ -62,8 +62,8 @@ class News(Base):
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     type: Mapped[str] = mapped_column(String(50), default="news")
-    id_url: Mapped[int] = mapped_column(Integer)
+    id_url: Mapped[int] = mapped_column(BigInteger)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    text: Mapped[str] = mapped_column(String(1000), nullable=False)
+    text: Mapped[str] = mapped_column(String(100000), nullable=False)
     date: Mapped[DateTime] = mapped_column(DateTime, default=func.now())
 

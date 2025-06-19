@@ -48,6 +48,7 @@ class ParserApi:
         self.flag_open_web = False
 
         self.filename = None
+        self._db = None
         self.path_trach = data_manager["trach"]
         self.path_save = data_manager["raw"]
         self.name_launch = "launch_parser"
@@ -64,6 +65,12 @@ class ParserApi:
         if import_device:
             task = self.import_device()
 
+    def init_db(sefl, db):
+        sefl._db = db
+
+    @property
+    def db(self):
+        return self._db
 
     def import_device(self, device: Device = None) -> asyncio.Task:
         self._device = device if device is not None else self.device(self.tick)

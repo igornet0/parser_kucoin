@@ -3,15 +3,18 @@ from datetime import datetime, timedelta
 from typing import List, Any, Callable, Dict
 import pandas as pd
 import multiprocessing as mp
+from emoji import replace_emoji
 import copy
+import re
 import os
 
-from parser_driver import ParserApi, KuCoinAPI, ParserNewsApi, ParserKucoin
+from parser_driver import (ParserApi, KuCoinAPI, ParserNewsApi, 
+                           ParserKucoin, TelegramParser)
 from core.models import Dataset, DatasetTimeseries
 from core.database.orm import *
 from core.utils import AutoDecorator
 from core.utils.tesseract_img_text import image_to_text
-from core import data_manager, Database
+from core import data_manager, Database, telegram_settings
 
 import logging
 
@@ -49,16 +52,9 @@ class AttParser:
         async with self.db.get_session() as session:
             coins = await orm_get_coins(session)
             self.coin_list = list(map(lambda x: x.name, filter(lambda x: x.parsed, coins)))
-            # for coin in coins:
-            #     if coin.name not in self.coin_list:
-            #         self.coin_list.append(coin.name)
-            #     elif coin.parsed is False:
-            #         self.coin_list.remove(coin.name)
 
     async def init_db(self, db: Database):
         self.db = db
-
-        await self.update_coin_list(db)
 
     async def _load_last_launch(self, time_parser):
         self.path_save = data_manager.get_last_launch()
@@ -70,25 +66,20 @@ class AttParser:
             for coin in data_manager.get_path_from(self.path_save):
                 for csv_file in data_manager.get_path_from(coin, filter_path=lambda x: time_parser in str(x.name)):
                     dt = DatasetTimeseries(csv_file, timetravel=time_parser)
-                    task = asyncio.create_task(self.add_buffer_data(coin, dt, time_parser))
+                    task = asyncio.create_task(self.add_buffer_dataTimeseries(coin, dt, time_parser))
                     tasks[coin] = task
         if tasks:
             [data for data in await asyncio.gather(*tasks.values())]
 
         self.flag_save = tmp
-                
-    async def parse(self, count: int = 10, miss: bool = False,
-                    last_launch: bool = False, time_parser="5m", 
-                    save: bool = False, save_type: str = "raw",
-                    *input_args) -> dict[str, pd.DataFrame]:
 
-        coins_list = list(map(lambda x: x.strip(), self.coin_list))
+    async def _init_kucoin_parsers(self, miss, last_launch, time_parser, count, *input_args):
         
         if not last_launch:
             self.path_save = None
         else:
             await self._load_last_launch(time_parser)
-
+        
         if isinstance(self.api, KuCoinAPI):
             if miss:
                 raise NotImplementedError("Missed data not implemented for KuCoinAPI")
@@ -97,14 +88,8 @@ class AttParser:
             func_parser = self.api.async_parsed_coins
             self.driver_lock = True
 
-            check_stop = self._check_stop_parser
-            input_args = ('USDT', time_parser, *input_args)
-        
-        elif isinstance(self.api, ParserNewsApi):
-            func_parser = self.api.get_last_news
             check_stop = self._check_stop
-            self.driver_lock = True
-            input_args = (count, )
+            input_args = ('USDT', time_parser, *input_args)
 
         elif isinstance(self.api, ParserApi):
             self.api.set_timetravel(time_parser)
@@ -118,15 +103,75 @@ class AttParser:
 
             self.driver_lock = True
 
+        return func_parser, check_stop, input_args
+
+    async def _init_news_parsers(self, *input_args):
+
+        def clear_text(text):
+            for word in telegram_settings.pop_words:
+                text = text.replace(word, '')
+            
+            text = replace_emoji(text, replace="")
+            text = re.sub(r'[\n\r\t]+', ' ', text)
+            text = re.sub(r'\s{2,}', ' ', text)
+
+            return text.strip()
+        
+        self.api.set_clear_text(clear_text)
+
+        if isinstance(self.api, ParserNewsApi):
+            
+            func_parser = self.api.get_last_news
+            self.api.init_db(self.db)
+            check_stop = self._check_stop
+
+            self.driver_lock = True
+            input_args = (100, )
+
+        elif isinstance(self.api, TelegramParser):
+
+            escaped = sorted(map(re.escape, telegram_settings.words), key=len, reverse=True)
+            pattern = r'(?<!\w)(?:' + '|'.join(escaped) + r')(?!\w)'
+            regex = re.compile(pattern, flags=re.IGNORECASE)
+            async with self.db.get_session() as session:
+                channels = await orm_get_telegram_channels(session, parsed=True)
+
+            def filter_event(event):
+                if not self.db:
+                    return True
+                
+                return any(filter(lambda chanel: chanel.name == event.chat.title, channels))
+
+            self.api.set_filter(lambda event: filter_event(event))
+
+            self.api.init_db(self.db)
+            # tg_parser.start_parser_event({tg_parser.event_parsing_telegram_channel_pattern: {"pattern": regex}})
+            func_parser = self.api.start_parser_event
+            # func_parser = self.api.get_last_news
+            check_stop = self._check_stop
+            self.driver_lock = True
+            input_args = ({self.api.event_parsing_telegram_channel_pattern: {"pattern": regex}}, )
+
+        return func_parser, check_stop, input_args
+
+    async def parse(self, count: int = 10, miss: bool = False,
+                    last_launch: bool = False, time_parser="5m", 
+                    save: bool = False, save_type: str = "raw",
+                    *input_args) -> dict[str, pd.DataFrame]:
+
+        if isinstance(self.api, KuCoinAPI) or isinstance(self.api, ParserKucoin):
+            func_parser, check_stop, input_args = await self._init_kucoin_parsers(miss, last_launch, time_parser, count, *input_args)
+        
+        elif isinstance(self.api, ParserNewsApi) or isinstance(self.api, TelegramParser):
+            func_parser, check_stop, input_args = await self._init_news_parsers(*input_args)
+
         if save:
             self.flag_save = True
             self.save_type = save_type
 
-        data: dict[str, Dataset] = await self.start_parser(func_parser,
-                                                    check_stop,
-                                                coins_list, count, 
-                                                time_parser,
-                                                *input_args)    
+        data: dict[str, Dataset] = await self.start_parser(func_parser, check_stop, count, 
+                                                            time_parser,
+                                                            *input_args)    
 
         return data
     
@@ -260,7 +305,13 @@ class AttParser:
 
                 return True
 
-    async def add_buffer_data(self, coin: str, data: DatasetTimeseries, time_parser: str = "5m"):
+    async def add_byffer_data(self, data):
+        self.buffer_data[datetime.now()] = data
+
+        if len(self.buffer_data) > BUFFER_SIZE:
+            self.buffer_data.pop(list(self.buffer_data.keys())[0])
+
+    async def add_buffer_dataTimeseries(self, coin: str, data: DatasetTimeseries, time_parser: str = "5m"):
 
         self.buffer_data.setdefault(coin, {})
         self.buffer_data[coin].setdefault(time_parser, None)
@@ -314,7 +365,10 @@ class AttParser:
 
     def get_data_from_buffer(self, coin, time_parser):
         return self.buffer_data.get(coin, {}).get(time_parser, None)
-
+    
+    def get_buffer_data(self):
+        return self.buffer_data
+    
     async def update_coins(self, coins: Dict[str, datetime]):
         await self.update_coin_list(self.db)
 
@@ -335,14 +389,9 @@ class AttParser:
                 coins[coin] = None
 
         return coins
-            
-
-    async def start_parser(self, func_parser:Callable, 
-                            check_stop: Callable,
-                           coins_list: List, count: int = -1, 
-                           time_parser: str ="5m", *args) -> List[pd.DataFrame]:
-        
-        coins = {coin: None for coin in coins_list}
+    
+    async def start_manager_kucoin(self, check_stop, func_parser, time_parser, count, *args):
+        coins = {}
         all_dataframes = {}
         result_queue = mp.Queue()
         count_cpu = mp.cpu_count() if not self.driver_lock else 1
@@ -356,18 +405,17 @@ class AttParser:
 
         try:
             while check_stop(**{"stop_event": stop_event, 
-                              "count": count, "all_dataframes": all_dataframes, 
-                              "len_coins": len(coins_list)}):
+                              "count": count, "all_dataframes": all_dataframes}):
 
                 # Управление процессами
-                all_dataframes = await self._manage_processes(
+                all_dataframes = await self._manage_processes_kucoin(
                     func_parser,
-                    coins, 
                     buffer_processes,
+                    coins,
                     result_queue,
                     time_parser,
                     count_cpu,
-                    *args
+                    *args,
                 )
 
                 for coin, data in all_dataframes.items():
@@ -375,7 +423,7 @@ class AttParser:
                     # data.sort(ascending=True)
                     # data.pop_last_row(-1)
                     # data.sort()
-                    task = asyncio.create_task(self.add_buffer_data(coin, data, time_parser))
+                    task = asyncio.create_task(self.add_buffer_dataTimeseries(coin, data, time_parser))
                     tasks[coin] = task
 
                 # all_dataframes = {}
@@ -393,16 +441,106 @@ class AttParser:
             # input_task.cancel()
             self._cleanup_processes(buffer_processes)
 
+    async def _manage_processes_telegram(self, func_parser, *args):
+        result_queue = mp.Queue()
+
+        logger.info(f"Start parser - {args} {datetime.now()}")
+
+        # asyncio.run(func_parser(args[0]))
+        await self._async_wrapper(func_parser, result_queue, (*args,))
+        logger.info(self.api.buffer_messages)
+        logger.info("End parser - %s", datetime.now())
+
+    async def start_manager_telegram(self, check_stop, func_parser, count, *args):
+        logger.debug(f"start_manager_telegram {args=}")
+        try:
+            while check_stop(**{"count": count, }):
+
+                # Управление процессами
+                await self._manage_processes_telegram(
+                    func_parser,
+                    *args
+                )
+
+                await asyncio.sleep(self.pause * 60)
+
+        except Exception as e:
+            logger.error(f"Error in parser: {e}")
+
+    async def _manage_processes_news(self, func_parser, *args):
+        result_queue = mp.Queue()
+
+        logger.info(f"Start parser - {args} {datetime.now()}")
+
+        # asyncio.run(func_parser(args[0]))
+        if self.get_buffer_data():
+            last_publish = min(self.get_buffer_data(), key=lambda k: self.get_buffer_data()[k].date)
+            input_data = (*args, last_publish)
+        else:
+            input_data = (*args,)
+
+        await self._async_wrapper(func_parser, result_queue, input_data)
+
+        news = await self._collect_results(result_queue)
+
+        logger.info("End parser - %s", datetime.now())
+
+        return news
+    
+    def add_buffer_dataNews(self, data: NewsData):
+        self.buffer_data[data.date] = data
+
+        if len(self.buffer_data) >= BUFFER_SIZE:
+            self.buffer_data.pop(list(self.buffer_data.keys())[0])
+
+    async def start_manager_news(self, check_stop, func_parser, count, *args):
+        logger.debug(f"start_manager_news {args=}")
+
+        try:
+            while check_stop(**{"count": count, }):
+
+                # Управление процессами
+                news = await self._manage_processes_news(
+                    func_parser,
+                    *args
+                )
+
+                for _, new in news.items():
+                    await self.add_buffer_dataNews(new)
+
+                await asyncio.sleep(self.pause * 60)
+
+        except Exception as e:
+            logger.error(f"Error in parser: {e}")
+
+    async def start_parser(self, func_parser:Callable, 
+                            check_stop: Callable, count: int = -1, 
+                           time_parser: str ="5m", *args) -> List[pd.DataFrame]:
+
+        if isinstance(self.api, ParserKucoin) or isinstance(self.api, KuCoinAPI):
+            print(args)
+            await self.start_manager_kucoin(check_stop, func_parser, time_parser, 
+                                            count, *args)
+            
+        elif isinstance(self.api, TelegramParser):
+            await self.start_manager_telegram(check_stop, func_parser, count, *args)
+        elif isinstance(self.api, ParserNewsApi):
+            await self.start_manager_news(check_stop, func_parser, count, *args)
+        else:
+            raise Exception("Unknown api")
+
         logger.info("End parser  - %s", datetime.now())
     
     def _check_stop_parser(self, stop_event, count, all_dataframes, len_coins):
         return len(list(filter(lambda list: len(list)==count, all_dataframes.values()))) != len_coins
     
-    def _check_stop(self, stop_event, count, all_dataframes: dict, len_coins):
-        return not all_dataframes or \
-                len(all_dataframes.keys()) <= len_coins or \
-                not all(map(lambda key: (not all_dataframes[key] is None) and len(all_dataframes[key]) >= count, all_dataframes.keys()))
-
+    # def _check_stop(self, stop_event, count, all_dataframes: dict, len_coins):
+    #     return not all_dataframes or \
+    #             len(all_dataframes.keys()) <= len_coins or \
+    #             not all(map(lambda key: (not all_dataframes[key] is None) and len(all_dataframes[key]) >= count, all_dataframes.keys()))
+    def _check_stop(self, *args, **kwargs):
+        return True
+    
     # async def _check_stop_input(self, stop_event: asyncio.Event):
     #     """Асинхронная проверка ввода 'q' для остановки"""
     #     while True:
@@ -469,28 +607,22 @@ class AttParser:
                         buffer_processes,
                         result_queue,
                         last_datetime,
-                        *args
+                        *args,
                     )
                 
                 coins[coin] = datetime.now()
 
         logger.info("End parser - %s", datetime.now())
 
-    async def _init_manager_processes_v2(self, func_parser, coins: Dict[str, datetime], buffer_processes, 
+    async def _init_manager_processes_v2(self, func_parser, coins: Dict[str, datetime],
                                 result_queue, time_parser, count_cpu, *args):
         
         logger.info("Start parser - %s, count_cpu: %d", datetime.now(), count_cpu)
         
         if isinstance(self.api, KuCoinAPI) and self.driver_lock:
-            logger.debug("Start coins")
-            
-            # coins_parsed = list(filter(lambda x: self._should_process_coin(coins[x], self.pause), coins.keys()))
 
-            # if not coins_parsed:
-            #     logger.info("No coins to process - %s", datetime.now())
-            #     return False
-            
             logger.debug("Start coins")
+            
             coin_last_datetimes = {coin: self.get_data_from_buffer(coin, time_parser).get_datetime_last() if self.get_data_from_buffer(coin, time_parser) else None 
                               for coin in filter(lambda x: self._should_process_coin(coins[x], self.pause), coins.keys())}
             
@@ -502,7 +634,7 @@ class AttParser:
                         func_parser,
                         coin_last_datetimes,
                         result_queue,
-                        *args
+                        *args,
                     )
             
             logger.debug("End coins full")
@@ -510,7 +642,7 @@ class AttParser:
             for coin in coins.keys():
                 coins[coin] = datetime.now()
 
-        elif isinstance(self.api, ParserNews) and self.driver_lock:
+        elif isinstance(self.api, ParserNewsApi) and self.driver_lock:
             logger.debug("Start news")
             coin_last_datetimes = {coin: self.get_data_from_buffer(coin, time_parser).get_datetime_last() if self.get_data_from_buffer(coin, time_parser) else None 
                               for coin in filter(lambda x: self._should_process_coin(coins[x], self.pause), coins.keys())}
@@ -525,22 +657,23 @@ class AttParser:
                         result_queue,
                         *args
                     )
-
-
+        
+        elif isinstance(self.api, TelegramParser) and self.driver_lock:
+            pass
 
         logger.info("End parser - %s", datetime.now())
         return True
 
-    async def _manage_processes(self, func_parser, coins, buffer_processes: dict,
+    async def _manage_processes_kucoin(self, func_parser, buffer_processes: dict, coins: dict,
                                 result_queue, time_parser, count_cpu, *args):
         
         if self.driver_lock:
             coins = await self.update_coins(coins)
-
-            if not await self._init_manager_processes_v2(func_parser, coins, buffer_processes, 
-                                result_queue, time_parser, count_cpu, *args):
+            if not await self._init_manager_processes_v2(func_parser, coins, result_queue, 
+                                                            time_parser, count_cpu, *args):
                 buffer_processes.clear()
                 return {}
+                
         else:
             manager = self._init_manager_processes(func_parser, coins, buffer_processes, 
                                     result_queue, time_parser, count_cpu, *args)
@@ -581,6 +714,34 @@ class AttParser:
 
         buffer_processes[coin] = {"process": p, "status": True}
 
+    async def _collect_kucoin(self, data):
+        all_dataframes = {}
+
+        if data is None:
+            return
+        elif isinstance(data, list):
+            for coin, dt in data:
+                if dt is None:
+                    logger.warning(f"Data for coin {coin} is None")
+                    continue
+
+                all_dataframes[coin] = dt
+        else:
+            coin = data[0]
+            data = data[1:]
+
+            if len(data) == 0:
+                return
+            elif len(data) == 1:
+                data = data[0]
+
+            if data is None:
+                logger.warning(f"Data for coin {coin} is None")
+            else:
+                all_dataframes[coin] = data
+            
+        return all_dataframes
+
     async def _collect_results(self, result_queue):
         """Сбор результатов из очереди"""
         all_dataframes = {}
@@ -588,29 +749,18 @@ class AttParser:
         while not result_queue.empty():
             # coin, *data = result_queue.get()
             data = result_queue.get()
-            
-            if data is None:
-                continue
-            elif isinstance(data, list):
-                for coin, dt in data:
-                    if dt is None:
-                        logger.warning(f"Data for coin {coin} is None")
-                        continue
 
-                    all_dataframes[coin] = dt
-            else:
-                coin = data[0]
-                data = data[1:]
-
-                if len(data) == 0:
+            if isinstance(self.api, KuCoinAPI) or isinstance(self.api, ParserKucoin):
+                collect_dataframes = await self._collect_kucoin(data)
+                if not collect_dataframes:
                     continue
-                elif len(data) == 1:
-                    data = data[0]
-
-                if data is None:
-                    logger.warning(f"Data for coin {coin} is None")
                 else:
-                    all_dataframes[coin] = data
+                    all_dataframes.update(collect_dataframes)
+            elif isinstance(self.api, ParserNewsApi):
+                for news in data:
+                    all_dataframes[news.id_url] = news
+            else:
+                raise Exception("Unknown api")
         
         return all_dataframes
 

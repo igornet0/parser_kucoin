@@ -7,13 +7,8 @@ import pandas as pd
 
 from core.utils.gui_deps import GUICheck
 
-if GUICheck.has_gui_deps():
-    from parser_driver import ParserKucoin, ParserNews
-else:
-    class ParserKucoin: pass
-    class ParserNews: pass
-
-from parser_driver import ParserApi, KuCoinAPI
+from parser_driver import (ParserApi, KuCoinAPI, ParserKucoin,
+                           TelegramParser, ParserNewsApi)
 
 import logging
 
@@ -24,7 +19,8 @@ class Handler:
     _parsers = {
         "parser kucoin_driver": ParserKucoin,
         "parser kucoin_api": KuCoinAPI,
-        "parser news_api": ParserNews,
+        "parser news_api": ParserNewsApi,
+        "parser telegram_api": TelegramParser,
         "parser api": ParserApi
     }
 

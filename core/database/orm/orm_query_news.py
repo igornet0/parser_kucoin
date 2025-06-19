@@ -11,9 +11,9 @@ class NewsType(Enum):
     
     telegram = "telegram"
     url = "url"
-    RSS = "rss"
-    API = "api"
-    TWITTER = "twitter"
+    rss = "RSS"
+    api = "API"
+    twitter = "TWITTER"
 
 class NewsData(BaseModel):
     id_url: int
@@ -87,7 +87,7 @@ async def orm_get_news_urls(session: AsyncSession, parsed: bool = None) -> list[
     result = await session.execute(query)
     return result.scalars().all()
 
-async def orm_get_news_telegram_channels(session: AsyncSession, parsed: bool = None) -> list[TelegramChannel]:
+async def orm_get_telegram_channels(session: AsyncSession, parsed: bool = None) -> list[TelegramChannel]:
     query = select(TelegramChannel)
 
     if parsed:
