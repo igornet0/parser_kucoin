@@ -8,4 +8,5 @@ __all__ = ("settings",
 
 from core.settings import settings
 from core.DataManager import data_manager
-from core.database import db_helper, Coin, Timeseries, DataTimeseries, Database
+from core.database import (db_helper, Coin, Timeseries, 
+                           DataTimeseries, Database,)

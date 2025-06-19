@@ -98,6 +98,14 @@ class KucoinConfig(BaseSettings):
     api_passphrase: str = Field(default=...)
 
 
+class CoindeskConfig(BaseSettings):
+
+    model_config = SettingsConfigDict(**AppBaseConfig.__dict__, 
+                                      env_prefix="COINDESK__")
+    
+    api_key: str = Field(default=...)
+
+
 class ConfigParser(BaseSettings):
 
     model_config = SettingsConfigDict(
@@ -109,5 +117,6 @@ class ConfigParser(BaseSettings):
     driver: ConfigParserDriver = Field(default_factory=ConfigParserDriver)
     database: ConfigDatabase = Field(default_factory=ConfigDatabase)
     tg: TelegramConfig = Field(default_factory=TelegramConfig)
+    coindesk: CoindeskConfig = Field(default_factory=CoindeskConfig)
 
 settings = ConfigParser()

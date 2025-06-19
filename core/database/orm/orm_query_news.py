@@ -11,6 +11,9 @@ class NewsType(Enum):
     
     telegram = "telegram"
     url = "url"
+    RSS = "rss"
+    API = "api"
+    TWITTER = "twitter"
 
 class NewsData(BaseModel):
     id_url: int

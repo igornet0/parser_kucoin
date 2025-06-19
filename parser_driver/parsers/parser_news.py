@@ -1,4 +1,4 @@
-
+import asyncio
 import os 
 import time
 from datetime import datetime 
@@ -43,7 +43,6 @@ class ParserNews(ParserApi):
         
         return urls
     
-
     def parser_elements(self, elements, title, setting):
 
         if setting.get("CAPTHA", False):
@@ -136,7 +135,6 @@ class ParserNews(ParserApi):
 
         return True
             
-    
     def start_parser(self, ulr:str=None, counter_news=1) -> pd.DataFrame:
 
         if not self.setting:

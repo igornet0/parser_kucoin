@@ -1,5 +1,5 @@
 from typing import Any
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 from telethon.tl.types import Channel
 
 
@@ -8,6 +8,17 @@ class TelegramParser(TelegramClient):
     def __init__(self, api_id, api_hash, phone):
         super().__init__('session', api_id, api_hash)
         self.phone = phone
+    
+    async def parsing_telegram_channel(self, channel_username: str):
+
+        @self.on(events.NewMessage(chats=channel_username))
+        async def handler(event):
+            print(f"\nНовое сообщение в {event.chat.title}:")
+            print(f"От: {event.sender_id}")
+            print(f"Дата: {event.message.date}")
+            print(f"Текст: {event.message.message}")
+            print("event: ", event)
+            print("-" * 50)
 
     async def get_channel_id(self, username_chanel: str) -> int:
         if not self.is_user_authorized():
