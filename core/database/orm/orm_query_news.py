@@ -96,7 +96,29 @@ async def orm_get_telegram_channels(session: AsyncSession, parsed: bool = None) 
     result = await session.execute(query)
     return result.scalars().all()
 
+async def orm_get_news(session: AsyncSession, id: int = None, type: str = None, title: str = None, date: datetime = None) -> News:
+    query = select(News)
+
+    if id:
+        query = query.where(News.id == id)
+
+    if type:
+        query = query.where(News.type == type)
+
+    if title:
+        query = query.where(News.title == title)
+
+    if date:
+        query = query.where(News.date == date)
+
+    result = await session.execute(query)
+    return result.scalars().first()
+
 async def orm_add_news(session: AsyncSession, data: NewsData) -> News:
+
+    news = await orm_get_news(session, title=data.title, date=data.date)
+    if news:
+        raise ValueError(f"News {data.id_url} already exists")
     
     news = News(id_url=data.id_url,
                 type=data.type.value,
