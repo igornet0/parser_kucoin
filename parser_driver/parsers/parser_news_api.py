@@ -45,11 +45,7 @@ class ParserNewsApi(ParserApi):
 
         for data in json_response["Data"]:
             date = datetime.fromtimestamp(data["PUBLISHED_ON"])
-<<<<<<< HEAD
-            if last_publish and date < last_publish:
-=======
             if last_publish and date <= last_publish:
->>>>>>> 15c9672 (Fix news parser)
                 break
 
             news = NewsData(
@@ -64,13 +60,9 @@ class ParserNewsApi(ParserApi):
 
             if self.db:
                 async with self.db.get_session() as session:
-<<<<<<< HEAD
-                    await orm_add_news(session, news)
-=======
                     try:
                         await orm_add_news(session, news)
                     except:
                         break
->>>>>>> 15c9672 (Fix news parser)
 
         return news_list
