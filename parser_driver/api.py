@@ -75,8 +75,6 @@ class ParserApi:
     def import_device(self, device: Device = None) -> asyncio.Task:
         self._device = device if device is not None else self.device(self.tick)
         logger.info(f"Device import {type(self._device)}")
-        # self.keypress_thread = threading.Thread(target=self.device.kb.start_listener, daemon=True)
-        # self.keypress_thread.start()
 
     @property
     def device(self) -> Device:
