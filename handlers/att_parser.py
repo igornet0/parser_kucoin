@@ -719,6 +719,7 @@ class AttParser:
 
         if data is None:
             return
+        
         elif isinstance(data, list):
             for coin, dt in data:
                 if dt is None:
@@ -727,18 +728,21 @@ class AttParser:
 
                 all_dataframes[coin] = dt
         else:
-            coin = data[0]
-            data = data[1:]
+            try:
+                coin = data[0]
+                data = data[1:]
 
-            if len(data) == 0:
-                return
-            elif len(data) == 1:
-                data = data[0]
+                if len(data) == 0:
+                    return
+                elif len(data) == 1:
+                    data = data[0]
 
-            if data is None:
-                logger.warning(f"Data for coin {coin} is None")
-            else:
-                all_dataframes[coin] = data
+                if data is None:
+                    logger.warning(f"Data for coin {coin} is None")
+                else:
+                    all_dataframes[coin] = data
+            except Exception as e:
+                logger.error(f"Error collecting data: {str(e)} - {data=}")
             
         return all_dataframes
 
@@ -752,6 +756,7 @@ class AttParser:
 
             if isinstance(self.api, KuCoinAPI) or isinstance(self.api, ParserKucoin):
                 collect_dataframes = await self._collect_kucoin(data)
+
                 if not collect_dataframes:
                     continue
                 else:

@@ -64,23 +64,23 @@ class KuCoinAPI(ParserApi):
 
         semaphore = asyncio.Semaphore(cls.max_concurrent)
         
-        async def fetch(session, symbol, last_dt):
+        async def fetch(symbol, last_dt):
             async with semaphore:
                 try:
-                    result = await cls.async_get_kline(session, symbol, currency, time, last_dt)
+                    result = await cls.async_get_kline(symbol, currency, time, last_dt)
                 except Exception as e:
                     cls.logger.error(f"Error get kline {symbol}-{currency} - {e}")
                     result = None
                 return result
         
-        async with aiohttp.ClientSession() as session:
             # tasks = [fetch(session, sym, dt) for sym, dt in coins_last_datetime.items()]
-            results = await asyncio.gather(*[fetch(session, sym, dt) for sym, dt in coins_last_datetime.items()], return_exceptions=True)
+        # async with aiohttp.ClientSession() as session:    
+        results = await asyncio.gather(*[fetch(sym, dt) for sym, dt in coins_last_datetime.items()], return_exceptions=True)
             
         return results
 
     @classmethod
-    async def async_get_kline(cls, session, symbol: str, 
+    async def async_get_kline(cls,symbol: str, 
                              currency: str = "USDT",
                              time: str = "5m",
                              last_datetime: datetime = None) -> DatasetTimeseries | None:
@@ -97,7 +97,7 @@ class KuCoinAPI(ParserApi):
             time = time.replace("W", "week")
 
         try:
-            data = await cls.market.async_get_kline(session, f"{symbol}-{currency}", time)
+            data = await cls.market.async_get_kline(f"{symbol}-{currency}", time)
         except Exception as e:
             cls.logger.error(f"Error get kline {symbol}-{currency} - {e}")
             return None
