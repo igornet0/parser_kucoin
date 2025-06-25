@@ -399,14 +399,14 @@ class AttParser:
         tasks = {}
         # stop_event = asyncio.Event()
         stop_event = None
+        error_count = 0
 
         # Запускаем фоновую задачу для проверки ввода
         # input_task = asyncio.create_task(self._check_stop_input(stop_event))
 
-        try:
-            while check_stop(**{"stop_event": stop_event, 
-                              "count": count, "all_dataframes": all_dataframes}):
-
+        while check_stop(**{"stop_event": stop_event, 
+                            "count": count, "all_dataframes": all_dataframes}):
+            try:
                 # Управление процессами
                 all_dataframes = await self._manage_processes_kucoin(
                     func_parser,
@@ -438,12 +438,16 @@ class AttParser:
 
                 await asyncio.sleep(5)
 
-        except Exception as e:
-            logger.error(f"Error in parser: {e}")
+            except Exception as e:
+                error_count += 1
+                logger.error(f"{error_count} - Error in parser: {e}")
+                await asyncio.sleep(5)
+                if error_count > 5:
+                    break
 
-        finally:
-            # input_task.cancel()
-            self._cleanup_processes(buffer_processes)
+        # finally:
+        #     # input_task.cancel()
+        #     self._cleanup_processes(buffer_processes)
 
     async def _manage_processes_telegram(self, func_parser, *args):
         result_queue = mp.Queue()
@@ -661,9 +665,6 @@ class AttParser:
                         result_queue,
                         *args
                     )
-        
-        elif isinstance(self.api, TelegramParser) and self.driver_lock:
-            pass
 
         logger.info("End parser - %s", datetime.now())
         return True
