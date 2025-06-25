@@ -418,6 +418,10 @@ class AttParser:
                     *args,
                 )
 
+                if not all_dataframes:
+                    await asyncio.sleep(5)
+                    continue
+
                 for coin, data in all_dataframes.items():
                     data: DatasetTimeseries
                     # data.sort(ascending=True)
