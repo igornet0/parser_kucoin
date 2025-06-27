@@ -399,7 +399,6 @@ class AttParser:
         tasks = {}
         # stop_event = asyncio.Event()
         stop_event = None
-        error_count = 0
 
         # Запускаем фоновую задачу для проверки ввода
         # input_task = asyncio.create_task(self._check_stop_input(stop_event))
@@ -439,11 +438,8 @@ class AttParser:
                 await asyncio.sleep(5)
 
             except Exception as e:
-                error_count += 1
-                logger.error(f"{error_count} - Error in parser: {e}")
+                logger.error(f"Error in Att parser: {e}")
                 await asyncio.sleep(5)
-                if error_count > 5:
-                    break
 
         # finally:
         #     # input_task.cancel()
@@ -667,6 +663,7 @@ class AttParser:
                     )
 
         logger.info("End parser - %s", datetime.now())
+
         return True
 
     async def _manage_processes_kucoin(self, func_parser, buffer_processes: dict, coins: dict,
@@ -756,21 +753,25 @@ class AttParser:
         all_dataframes = {}
 
         while not result_queue.empty():
-            # coin, *data = result_queue.get()
-            data = result_queue.get()
+            try:
+                # coin, *data = result_queue.get()
+                data = result_queue.get()
 
-            if isinstance(self.api, KuCoinAPI) or isinstance(self.api, ParserKucoin):
-                collect_dataframes = await self._collect_kucoin(data)
+                if isinstance(self.api, KuCoinAPI) or isinstance(self.api, ParserKucoin):
+                    collect_dataframes = await self._collect_kucoin(data)
 
-                if not collect_dataframes:
-                    continue
+                    if not collect_dataframes:
+                        continue
+                    else:
+                        all_dataframes.update(collect_dataframes)
+                elif isinstance(self.api, ParserNewsApi):
+                    for news in data:
+                        all_dataframes[news.id_url] = news
                 else:
-                    all_dataframes.update(collect_dataframes)
-            elif isinstance(self.api, ParserNewsApi):
-                for news in data:
-                    all_dataframes[news.id_url] = news
-            else:
-                raise Exception("Unknown api")
+                    raise Exception("Unknown api")
+            except Exception as e:
+                logger.error(f"Error collecting results: {e} - {data=}")
+                continue
         
         return all_dataframes
 
